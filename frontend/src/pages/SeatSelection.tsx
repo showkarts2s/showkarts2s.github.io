@@ -37,6 +37,7 @@ export default function SeatSelection() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [mapZoom, setMapZoom] = useState(1);
   const mapViewportRef = useRef<HTMLDivElement>(null);
+  const centeredMapForConcertRef = useRef<string | null>(null);
 
   const {
     data: concert,
@@ -104,12 +105,14 @@ export default function SeatSelection() {
 
   useEffect(() => {
     const viewport = mapViewportRef.current;
-    if (!viewport || window.innerWidth >= 640) return;
+    if (!viewport || window.innerWidth >= 640 || centeredMapForConcertRef.current === concertId)
+      return;
+    centeredMapForConcertRef.current = concertId ?? null;
     const frame = window.requestAnimationFrame(() => {
       viewport.scrollLeft = (viewport.scrollWidth - viewport.clientWidth) / 2;
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [seatMap]);
+  }, [concertId, seatMap]);
 
   const toggleSeat = (seatId: string, state: string) => {
     if (state !== "available" && !selected.has(seatId)) {
@@ -331,7 +334,11 @@ export default function SeatSelection() {
             Swipe sideways to view every seat
           </div>
 
-          <div ref={mapViewportRef} className="touch-pan-x overflow-x-auto px-3 py-6 sm:px-6">
+          <div
+            ref={mapViewportRef}
+            className="overflow-x-auto overflow-y-hidden px-3 py-6 [overscroll-behavior-x:contain] [scrollbar-gutter:stable] [touch-action:pan-x_pan-y] [-webkit-overflow-scrolling:touch] sm:px-6"
+            data-testid="seat-map-scroll-viewport"
+          >
             <div
               className="relative mx-auto min-w-[760px] max-w-[980px] overflow-hidden rounded-[28px] border border-white/[0.07] bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.08),transparent_30%),linear-gradient(180deg,rgba(10,15,28,0.98),rgba(6,10,20,0.98))] px-8 pb-8 pt-7"
               data-testid="bowl-layout"
@@ -542,6 +549,34 @@ export default function SeatSelection() {
         <Sparkles className="size-3.5 text-violet-400" /> Live availability refreshes every 15
         seconds
         <Ticket className="ml-2 size-3.5 text-cyan-400" /> Prices shown per seat
+      </div>
+
+      <div className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 xl:hidden">
+        <div className="mx-auto flex max-w-lg items-center gap-3 rounded-2xl border border-white/10 bg-[#111625]/95 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.65)] backdrop-blur-xl">
+          <div className="min-w-0 flex-1 pl-1">
+            <p className="text-[11px] font-medium text-slate-400">
+              {chosen.length === 0
+                ? "Select seats from the map"
+                : `${chosen.length} seat${chosen.length === 1 ? "" : "s"} selected`}
+            </p>
+            <p className="mt-0.5 truncate font-heading text-lg font-bold text-white">
+              {inr(estimatedTotal)}
+            </p>
+          </div>
+          <Button
+            onClick={proceed}
+            disabled={chosen.length === 0 || holdMutation.isPending}
+            className="h-11 shrink-0 rounded-xl bg-gradient-to-r from-violet-500 to-cyan-400 px-5 font-semibold text-white disabled:opacity-45"
+            data-testid="mobile-proceed-payment-button"
+          >
+            {holdMutation.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Lock className="size-4" />
+            )}
+            <span>{me ? "Continue" : "Log in"}</span>
+          </Button>
+        </div>
       </div>
     </div>
   );
