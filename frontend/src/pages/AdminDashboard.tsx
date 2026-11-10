@@ -72,6 +72,13 @@ const emptyConcert = {
   genre: "",
   poster_url: "",
   popularity: 50,
+  categories: [
+    { key: "general", name: "General – Bronze Zone", color: "#94A3B8", price: 799, quantity: 48 },
+    { key: "silver", name: "Silver – Grandstand", color: "#38BDF8", price: 1499, quantity: 48 },
+    { key: "gold", name: "Gold – Main Bowl", color: "#FACC15", price: 2499, quantity: 42 },
+    { key: "platinum", name: "Platinum – Front Pit", color: "#C084FC", price: 3999, quantity: 24 },
+    { key: "vip", name: "VIP – Backstage Lounge", color: "#F43F5E", price: 6999, quantity: 10 },
+  ],
 };
 
 export default function AdminDashboard() {
@@ -153,23 +160,31 @@ export default function AdminDashboard() {
   });
 
   const saveConcert = useMutation({
-    mutationFn: () => {
-      if (concertDialog === "new")
-        return apiPost("/admin/concerts", {
+    mutationFn: async () => {
+      let saved: Concert;
+      if (concertDialog === "new") {
+        saved = await apiPost<Concert>("/admin/concerts", {
           ...concertForm,
+          categories: undefined,
           date: new Date(concertForm.date).toISOString(),
         });
-      return apiPatch(`/admin/concerts/${(concertDialog as Concert).id}`, {
-        title: concertForm.title,
-        venue_name: concertForm.venue_name,
-        city: concertForm.city,
-        address: concertForm.address,
-        description: concertForm.description,
-        genre: concertForm.genre,
-        poster_url: concertForm.poster_url,
-        popularity: concertForm.popularity,
-        ...(concertForm.date ? { date: new Date(concertForm.date).toISOString() } : {}),
-      });
+      } else {
+        saved = await apiPatch<Concert>(`/admin/concerts/${(concertDialog as Concert).id}`, {
+          title: concertForm.title,
+          venue_name: concertForm.venue_name,
+          city: concertForm.city,
+          address: concertForm.address,
+          description: concertForm.description,
+          genre: concertForm.genre,
+          poster_url: concertForm.poster_url,
+          popularity: concertForm.popularity,
+          ...(concertForm.date ? { date: new Date(concertForm.date).toISOString() } : {}),
+        });
+      }
+      return apiPatch<Concert>(
+        `/admin/concerts/${saved.id}/categories`,
+        concertForm.categories.map(({ key, price, quantity }) => ({ key, price, quantity })),
+      );
     },
     onSuccess: () => {
       toast.success(
@@ -233,7 +248,7 @@ export default function AdminDashboard() {
           <ShieldAlert className="mx-auto size-10 text-amber-300" />
           <p className="mt-4 font-heading text-2xl font-bold text-white">Admin access only</p>
           <p className="mt-2 text-sm text-slate-400">
-            Log in with an administrator account (admin@showkart.in / Admin@123) to manage ShowKart.
+            Log in with an administrator account to manage ShowKart.
           </p>
           <Button asChild className="mt-6 bg-gradient-to-r from-violet-500 to-cyan-400 text-white">
             <Link to="/login?next=/admin">Log in as admin</Link>
@@ -279,6 +294,13 @@ export default function AdminDashboard() {
         poster_url: c.poster_url,
         popularity: c.popularity,
         date: toLocalInput(c.date),
+        categories: c.categories.map(({ key, name, color, price, quantity }) => ({
+          key,
+          name,
+          color,
+          price,
+          quantity,
+        })),
       });
     }
   };
@@ -739,7 +761,7 @@ export default function AdminDashboard() {
       {/* ---------- ARTIST DIALOG ---------- */}
       <Dialog open={!!artistDialog} onOpenChange={(o) => !o && setArtistDialog(null)}>
         <DialogContent
-          className="max-h-[85vh] max-w-lg overflow-y-auto border-white/10 bg-[#121524] text-slate-100"
+          className="max-h-[88vh] max-w-2xl overflow-y-auto border-white/10 bg-[#121524] text-slate-100"
           data-testid="admin-artist-dialog"
         >
           <DialogHeader>
@@ -936,10 +958,56 @@ export default function AdminDashboard() {
                 data-testid="admin-concert-poster-input"
               />
             </Field>
+            <div className="mt-2 rounded-2xl border border-cyan-300/10 bg-cyan-300/[0.025] p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="font-heading text-sm font-bold text-white">
+                    Ticket prices for this concert
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Set prices for this event and city. The lowest tier becomes the customer-facing
+                    “Starting from” price.
+                  </p>
+                </div>
+                <IndianRupee className="mt-0.5 size-5 shrink-0 text-cyan-300" />
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {concertForm.categories.map((category, index) => (
+                  <label
+                    key={category.key}
+                    className="flex items-center gap-3 rounded-xl border border-white/[0.07] bg-black/10 px-3 py-2.5"
+                  >
+                    <span
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: category.color }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-300">
+                      {category.name}
+                    </span>
+                    <span className="text-sm text-slate-500">₹</span>
+                    <Input
+                      inputMode="numeric"
+                      value={category.price}
+                      onChange={(event) => {
+                        const price = Number(event.target.value.replace(/\D/g, ""));
+                        setConcertForm((current) => ({
+                          ...current,
+                          categories: current.categories.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, price } : item,
+                          ),
+                        }));
+                      }}
+                      className="h-8 w-24 border-white/10 bg-[#0A0D18] text-right text-sm text-white"
+                      aria-label={`${category.name} ticket price`}
+                      data-testid={`admin-dialog-price-${category.key}`}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
             <p className="text-xs text-slate-500">
-              Sample data is clearly labelled “Sample Event” on the customer site. New concerts
-              follow the standard 5-tier pricing (₹499–₹4,999) — adjust per concert under Ticket
-              pricing.
+              Sample data is clearly labelled ?Sample Event? on the customer site. Prices saved here
+              are shown across Explore Concerts, event details, seat selection and checkout.
             </p>
           </div>
           <DialogFooter>
@@ -957,6 +1025,7 @@ export default function AdminDashboard() {
                 concertForm.title.length < 3 ||
                 !concertForm.venue_name ||
                 !concertForm.city ||
+                concertForm.categories.some((category) => category.price < 1) ||
                 (concertDialog === "new" ? !concertForm.artist_id || !concertForm.date : false)
               }
               className="bg-gradient-to-r from-violet-500 to-cyan-400 text-white"

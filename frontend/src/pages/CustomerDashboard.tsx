@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { QRCodeSVG } from "qrcode.react";
 import {
+  ArrowUpRight,
   Bell,
   CalendarDays,
   Heart,
@@ -21,6 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiGet, apiPost, apiPatch } from "@/lib/api";
@@ -30,7 +33,6 @@ import type { AppNotification, Booking, User, WishlistItem } from "@/lib/types";
 
 export default function CustomerDashboard() {
   const { data: me, isLoading: meLoading } = useMe();
-  const { endSession } = useSession();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "bookings";
@@ -122,29 +124,16 @@ export default function CustomerDashboard() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          {me.role === "admin" && (
-            <Button
-              variant="outline"
-              className="border-amber-300/40 text-amber-200 hover:bg-amber-400/10"
-              onClick={() => navigate("/admin")}
-              data-testid="dashboard-admin-button"
-            >
-              Admin dashboard
-            </Button>
-          )}
+        {me.role === "admin" && (
           <Button
             variant="outline"
-            className="border-white/15 text-slate-300 hover:bg-white/5"
-            onClick={async () => {
-              await endSession();
-              navigate("/");
-            }}
-            data-testid="dashboard-logout-button"
+            className="border-amber-300/40 text-amber-200 hover:bg-amber-400/10"
+            onClick={() => navigate("/admin")}
+            data-testid="dashboard-admin-button"
           >
-            <LogOut className="mr-1.5 size-4" /> Log out
+            Admin dashboard
           </Button>
-        </div>
+        )}
       </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -270,37 +259,80 @@ export default function CustomerDashboard() {
               testid="dashboard-empty-tickets"
             />
           ) : (
-            <div className="grid gap-5 sm:grid-cols-2">
-              {upcoming.map((b) => (
-                <Link
-                  key={b.id}
-                  to={`/ticket/${b.id}?from=dashboard`}
-                  data-testid={`ticket-view-${b.id}`}
-                  className="group flex gap-4 rounded-2xl border border-white/10 bg-[#15192E] p-4 transition-all hover:-translate-y-1 hover:border-violet-400/60"
-                >
-                  <div className="relative flex items-center justify-center rounded-xl bg-white p-3">
-                    <QrCode className="size-14 text-black" strokeWidth={1.2} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate font-heading font-bold text-white group-hover:text-cyan-200">
-                      {b.concert_title}
-                    </p>
-                    <p className="text-sm text-slate-400">
-                      {fmtDate(b.date)} · {b.venue_name}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Seats: {b.seats.map((s) => s.seat_id).join(", ")}
-                    </p>
-                    <p className="mt-1 font-mono text-xs text-cyan-300">{b.ref}</p>
-                    <Badge
-                      variant="outline"
-                      className="mt-2 border-emerald-300/40 text-emerald-300"
-                    >
-                      Show QR at gate
-                    </Badge>
-                  </div>
-                </Link>
-              ))}
+            <div className="grid gap-5 xl:grid-cols-2">
+              {upcoming.map((b) => {
+                const ticket = b.tickets[0];
+                const qrValue = ticket
+                  ? `SHOWKART|${b.ref}|${ticket.ticket_id}|${ticket.seat_id}|${ticket.qr_token}`
+                  : b.ref;
+                return (
+                  <Link
+                    key={b.id}
+                    to={`/ticket/${b.id}?from=dashboard`}
+                    data-testid={`ticket-view-${b.id}`}
+                    className="group relative overflow-hidden rounded-3xl border border-violet-300/15 bg-gradient-to-br from-[#171b31] via-[#121625] to-[#0c1520] p-5 shadow-[0_18px_55px_rgba(0,0,0,0.28)] transition-all hover:-translate-y-1 hover:border-cyan-300/35 hover:shadow-[0_22px_70px_rgba(34,211,238,0.08)] sm:p-6"
+                  >
+                    <span className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 via-fuchsia-400 to-cyan-400" />
+                    <div className="flex items-start justify-between gap-3">
+                      <Badge
+                        variant="outline"
+                        className="border-emerald-300/25 bg-emerald-300/10 text-emerald-200"
+                      >
+                        <Ticket className="mr-1.5 size-3.5" /> Active e-ticket
+                      </Badge>
+                      <span className="grid size-8 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-400 transition-colors group-hover:border-cyan-300/30 group-hover:text-cyan-200">
+                        <ArrowUpRight className="size-4" />
+                      </span>
+                    </div>
+
+                    <div className="mt-5 grid items-center gap-5 sm:grid-cols-[minmax(0,1fr)_126px]">
+                      <div className="min-w-0">
+                        <p className="font-heading text-xl font-bold leading-tight text-white group-hover:text-cyan-100">
+                          {b.concert_title}
+                        </p>
+                        <div className="mt-4 space-y-2 text-sm text-slate-400">
+                          <p className="flex items-center gap-2">
+                            <CalendarDays className="size-4 shrink-0 text-cyan-300" />
+                            {fmtDateTime(b.date)}
+                          </p>
+                          <p className="flex items-center gap-2">
+                            <MapPin className="size-4 shrink-0 text-violet-300" />
+                            <span className="truncate">
+                              {b.venue_name}, {b.city}
+                            </span>
+                          </p>
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                            Seat{b.seats.length === 1 ? "" : "s"}:{" "}
+                            {b.seats.map((s) => s.seat_id).join(", ")}
+                          </span>
+                          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-xs text-cyan-200">
+                            {b.ref}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 sm:block">
+                        <div className="w-max rounded-2xl border border-cyan-300/20 bg-white p-2 shadow-[0_0_30px_rgba(34,211,238,0.12)]">
+                          <QRCodeSVG
+                            value={qrValue}
+                            size={92}
+                            bgColor="#FFFFFF"
+                            fgColor="#090A10"
+                          />
+                        </div>
+                        <div className="sm:text-center">
+                          <p className="mt-0 text-xs font-semibold text-cyan-200 sm:mt-2">
+                            Show QR at gate
+                          </p>
+                          <p className="mt-1 text-[10px] text-slate-500">Tap to open pass</p>
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </TabsContent>
@@ -596,9 +628,25 @@ function EmptyState({
 
 function ProfileSection({ me }: { me: User }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { endSession } = useSession();
   const [name, setName] = useState(me.full_name);
   const [mobile, setMobile] = useState(me.mobile);
   const [pw, setPw] = useState({ current_password: "", new_password: "" });
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const logout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await endSession();
+      navigate("/", { replace: true });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not log out. Please try again.");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
 
   const saveProfile = useMutation({
     mutationFn: () => apiPatch<User>("/auth/profile", { full_name: name, mobile }),
@@ -675,22 +723,24 @@ function ProfileSection({ me }: { me: User }) {
         <div className="mt-5 space-y-4">
           <div>
             <Label className="text-slate-300">Current password</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={pw.current_password}
               onChange={(e) => setPw({ ...pw, current_password: e.target.value })}
-              className="mt-1.5 border-white/10 bg-white/5 text-slate-100"
+              wrapperClassName="mt-1.5"
+              className="border-white/10 bg-white/5 text-slate-100"
+              visibilityLabel="current password"
               data-testid="profile-current-password-input"
             />
           </div>
           <div>
             <Label className="text-slate-300">New password</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={pw.new_password}
               onChange={(e) => setPw({ ...pw, new_password: e.target.value })}
               placeholder="8+ chars, letters & numbers"
-              className="mt-1.5 border-white/10 bg-white/5 text-slate-100"
+              wrapperClassName="mt-1.5"
+              className="border-white/10 bg-white/5 text-slate-100"
+              visibilityLabel="new password"
               data-testid="profile-new-password-input"
             />
           </div>
@@ -705,6 +755,26 @@ function ProfileSection({ me }: { me: User }) {
             password
           </Button>
         </div>
+      </div>
+      <div className="flex flex-col gap-4 rounded-3xl border border-rose-400/20 bg-rose-400/[0.04] p-6 sm:flex-row sm:items-center sm:justify-between lg:col-span-2">
+        <div>
+          <h2 className="font-heading text-lg font-bold text-white">Sign out of ShowKart</h2>
+          <p className="mt-1 text-sm text-slate-400">End your current session on this device.</p>
+        </div>
+        <Button
+          variant="outline"
+          className="border-rose-400/35 text-rose-300 hover:bg-rose-400/10 hover:text-rose-200"
+          onClick={logout}
+          disabled={loggingOut}
+          data-testid="profile-logout-button"
+        >
+          {loggingOut ? (
+            <Loader2 className="mr-2 size-4 animate-spin" />
+          ) : (
+            <LogOut className="mr-2 size-4" />
+          )}
+          Log out
+        </Button>
       </div>
     </div>
   );

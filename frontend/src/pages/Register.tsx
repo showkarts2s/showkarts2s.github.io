@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { BadgePercent, Loader2, Mail, QrCode, Ticket, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { apiPost } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -109,15 +110,15 @@ export default function Register() {
               <Label htmlFor="password" className="text-slate-300">
                 Password
               </Label>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 required
                 minLength={8}
                 value={form.password}
                 onChange={set("password")}
                 placeholder="8+ chars, letters & numbers"
-                className="mt-1.5 border-white/10 bg-white/5 text-slate-100"
+                wrapperClassName="mt-1.5"
+                className="border-white/10 bg-white/5 text-slate-100"
                 data-testid="register-password-input"
               />
             </div>
@@ -125,14 +126,15 @@ export default function Register() {
               <Label htmlFor="confirm_password" className="text-slate-300">
                 Confirm password
               </Label>
-              <Input
+              <PasswordInput
                 id="confirm_password"
-                type="password"
                 required
                 value={form.confirm_password}
                 onChange={set("confirm_password")}
                 placeholder="Repeat password"
-                className="mt-1.5 border-white/10 bg-white/5 text-slate-100"
+                wrapperClassName="mt-1.5"
+                className="border-white/10 bg-white/5 text-slate-100"
+                visibilityLabel="password confirmation"
                 data-testid="register-confirm-password-input"
               />
             </div>

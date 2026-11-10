@@ -1,24 +1,22 @@
 import BrandLogo from "@/components/BrandLogo";
 import { useState } from "react";
-import { toast } from "sonner";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   Menu,
   ChevronDown,
   Search,
-  ShoppingBag,
   Ticket,
   User as UserIcon,
-  LogOut,
   LayoutDashboard,
   ShieldCheck,
-  Sparkles,
+  UserPlus,
   Home as HomeIcon,
   Compass,
   Store,
   Mic2,
   Info,
   ArrowRight,
+  WalletCards,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -31,7 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useMe, useSession } from "@/lib/session";
+import { useMe } from "@/lib/session";
 import { initial } from "@/lib/format";
 
 const LINKS = [
@@ -62,24 +60,8 @@ const MOBILE_LINKS = [
 
 export default function Navbar() {
   const { data: me } = useMe();
-  const { endSession } = useSession();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
-
-  const handleLogout = async () => {
-    if (loggingOut) return;
-    setLoggingOut(true);
-    try {
-      await endSession();
-      setOpen(false);
-      navigate("/", { replace: true });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not log out. Please try again.");
-    } finally {
-      setLoggingOut(false);
-    }
-  };
 
   const linkCls = ({ isActive }: { isActive: boolean }) =>
     `text-sm font-medium tracking-wide transition-colors hover:text-white ${isActive ? "text-white" : "text-slate-300/80"}`;
@@ -135,35 +117,48 @@ export default function Navbar() {
                 <DropdownMenuGroup>
                   <DropdownMenuLabel className="text-slate-300">{me.email}</DropdownMenuLabel>
                   <DropdownMenuSeparator className="bg-white/10" />
-                  <DropdownMenuItem
-                    onClick={() => navigate("/dashboard")}
-                    data-testid="navbar-dashboard-link"
-                  >
-                    <LayoutDashboard className="size-4" /> My Dashboard
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => navigate("/dashboard?tab=tickets")}
-                    data-testid="navbar-tickets-link"
-                  >
-                    <Ticket className="size-4" /> My Tickets
-                  </DropdownMenuItem>
-                  {me.role === "admin" && (
-                    <DropdownMenuItem
-                      onClick={() => navigate("/admin")}
-                      data-testid="navbar-admin-link"
-                    >
-                      <ShieldCheck className="size-4" /> Admin Dashboard
-                    </DropdownMenuItem>
+                  {me.role === "card_manager" ? (
+                    <>
+                      <DropdownMenuItem
+                        onClick={() => navigate("/cards")}
+                        data-testid="navbar-card-studio-link"
+                      >
+                        <WalletCards className="size-4" /> Card Studio
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate("/cards?tab=profile")}>
+                        <UserIcon className="size-4" /> Profile & settings
+                      </DropdownMenuItem>
+                    </>
+                  ) : (
+                    <>
+                      <DropdownMenuItem
+                        onClick={() => navigate("/dashboard")}
+                        data-testid="navbar-dashboard-link"
+                      >
+                        <LayoutDashboard className="size-4" /> My Dashboard
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => navigate("/dashboard?tab=tickets")}
+                        data-testid="navbar-tickets-link"
+                      >
+                        <Ticket className="size-4" /> My Tickets
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => navigate("/dashboard?tab=profile")}
+                        data-testid="navbar-profile-link"
+                      >
+                        <UserIcon className="size-4" /> Profile & settings
+                      </DropdownMenuItem>
+                      {me.role === "admin" && (
+                        <DropdownMenuItem
+                          onClick={() => navigate("/admin")}
+                          data-testid="navbar-admin-link"
+                        >
+                          <ShieldCheck className="size-4" /> Admin Dashboard
+                        </DropdownMenuItem>
+                      )}
+                    </>
                   )}
-                  <DropdownMenuSeparator className="bg-white/10" />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={handleLogout}
-                    disabled={loggingOut}
-                    data-testid="navbar-logout-button"
-                  >
-                    <LogOut className="size-4" /> Log out
-                  </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -184,7 +179,7 @@ export default function Navbar() {
                 onClick={() => navigate("/register")}
                 data-testid="navbar-register-button"
               >
-                <Sparkles className="size-4" /> Register
+                <UserPlus className="size-4" /> Register
               </Button>
             </div>
           )}
@@ -257,32 +252,51 @@ export default function Navbar() {
                 ))}
                 <div className="my-2 h-px bg-white/10" />
                 {me ? (
-                  <>
-                    <Link
-                      to="/dashboard"
-                      onClick={() => setOpen(false)}
-                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 hover:bg-white/10"
-                    >
-                      My Dashboard
-                    </Link>
-                    {me.role === "admin" && (
+                  me.role === "card_manager" ? (
+                    <>
                       <Link
-                        to="/admin"
+                        to="/cards"
                         onClick={() => setOpen(false)}
                         className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 hover:bg-white/10"
                       >
-                        Admin Dashboard
+                        Card Studio
                       </Link>
-                    )}
-                    <button
-                      onClick={handleLogout}
-                      className="rounded-xl px-4 py-3 text-left text-sm font-medium text-rose-300 hover:bg-rose-400/10"
-                      data-testid="mobile-logout-button"
-                      disabled={loggingOut}
-                    >
-                      Log out
-                    </button>
-                  </>
+                      <Link
+                        to="/cards?tab=profile"
+                        onClick={() => setOpen(false)}
+                        className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 hover:bg-white/10"
+                      >
+                        Profile & settings
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <Link
+                        to="/dashboard"
+                        onClick={() => setOpen(false)}
+                        className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 hover:bg-white/10"
+                      >
+                        My Dashboard
+                      </Link>
+                      <Link
+                        to="/dashboard?tab=profile"
+                        onClick={() => setOpen(false)}
+                        className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 hover:bg-white/10"
+                        data-testid="mobile-profile-link"
+                      >
+                        Profile & settings
+                      </Link>
+                      {me.role === "admin" && (
+                        <Link
+                          to="/admin"
+                          onClick={() => setOpen(false)}
+                          className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 hover:bg-white/10"
+                        >
+                          Admin Dashboard
+                        </Link>
+                      )}
+                    </>
+                  )
                 ) : (
                   <div className="flex flex-col gap-2">
                     <Button
@@ -302,7 +316,7 @@ export default function Navbar() {
                         navigate("/register");
                       }}
                     >
-                      <ShoppingBag className="size-4" /> Create account
+                      <UserPlus className="size-4" /> Create account
                     </Button>
                   </div>
                 )}

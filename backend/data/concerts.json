@@ -17,7 +17,7 @@
       {
         "key": "general",
         "name": "General – Bronze Zone",
-        "price": 499,
+        "price": 999,
         "rows": [
           "J",
           "K",
@@ -31,7 +31,7 @@
       {
         "key": "silver",
         "name": "Silver – Grandstand",
-        "price": 999,
+        "price": 1999,
         "rows": [
           "G",
           "H",
@@ -45,7 +45,7 @@
       {
         "key": "gold",
         "name": "Gold – Main Bowl",
-        "price": 1999,
+        "price": 3999,
         "rows": [
           "D",
           "E",
@@ -59,7 +59,7 @@
       {
         "key": "platinum",
         "name": "Platinum – Front Pit",
-        "price": 2999,
+        "price": 6999,
         "rows": [
           "B",
           "C"
@@ -72,7 +72,7 @@
       {
         "key": "vip",
         "name": "VIP – Backstage Lounge",
-        "price": 4999,
+        "price": 11999,
         "rows": [
           "A"
         ],
@@ -82,7 +82,7 @@
         "quantity": 10
       }
     ],
-    "min_price": 499,
+    "min_price": 999,
     "total_seats": 172,
     "available_count": 170,
     "is_past": false
@@ -105,7 +105,7 @@
       {
         "key": "general",
         "name": "General – Bronze Zone",
-        "price": 499,
+        "price": 799,
         "rows": [
           "J",
           "K",
@@ -119,7 +119,7 @@
       {
         "key": "silver",
         "name": "Silver – Grandstand",
-        "price": 999,
+        "price": 1499,
         "rows": [
           "G",
           "H",
@@ -133,7 +133,7 @@
       {
         "key": "gold",
         "name": "Gold – Main Bowl",
-        "price": 1999,
+        "price": 2499,
         "rows": [
           "D",
           "E",
@@ -147,7 +147,7 @@
       {
         "key": "platinum",
         "name": "Platinum – Front Pit",
-        "price": 2999,
+        "price": 3999,
         "rows": [
           "B",
           "C"
@@ -160,7 +160,7 @@
       {
         "key": "vip",
         "name": "VIP – Backstage Lounge",
-        "price": 4999,
+        "price": 6999,
         "rows": [
           "A"
         ],
@@ -170,7 +170,7 @@
         "quantity": 10
       }
     ],
-    "min_price": 499,
+    "min_price": 799,
     "total_seats": 172,
     "available_count": 170,
     "is_past": false
@@ -193,7 +193,7 @@
       {
         "key": "general",
         "name": "General – Bronze Zone",
-        "price": 499,
+        "price": 1299,
         "rows": [
           "J",
           "K",
@@ -207,7 +207,7 @@
       {
         "key": "silver",
         "name": "Silver – Grandstand",
-        "price": 999,
+        "price": 2499,
         "rows": [
           "G",
           "H",
@@ -221,7 +221,7 @@
       {
         "key": "gold",
         "name": "Gold – Main Bowl",
-        "price": 1999,
+        "price": 4499,
         "rows": [
           "D",
           "E",
@@ -235,7 +235,7 @@
       {
         "key": "platinum",
         "name": "Platinum – Front Pit",
-        "price": 2999,
+        "price": 6999,
         "rows": [
           "B",
           "C"
@@ -248,7 +248,7 @@
       {
         "key": "vip",
         "name": "VIP – Backstage Lounge",
-        "price": 4999,
+        "price": 10999,
         "rows": [
           "A"
         ],
@@ -258,7 +258,7 @@
         "quantity": 10
       }
     ],
-    "min_price": 499,
+    "min_price": 1299,
     "total_seats": 172,
     "available_count": 170,
     "is_past": false
@@ -281,7 +281,7 @@
       {
         "key": "general",
         "name": "General – Bronze Zone",
-        "price": 499,
+        "price": 599,
         "rows": [
           "J",
           "K",
@@ -309,7 +309,7 @@
       {
         "key": "gold",
         "name": "Gold – Main Bowl",
-        "price": 1999,
+        "price": 1799,
         "rows": [
           "D",
           "E",
@@ -346,7 +346,7 @@
         "quantity": 10
       }
     ],
-    "min_price": 499,
+    "min_price": 599,
     "total_seats": 172,
     "available_count": 170,
     "is_past": false
@@ -369,7 +369,7 @@
       {
         "key": "general",
         "name": "General – Bronze Zone",
-        "price": 499,
+        "price": 1499,
         "rows": [
           "J",
           "K",
@@ -383,7 +383,7 @@
       {
         "key": "silver",
         "name": "Silver – Grandstand",
-        "price": 999,
+        "price": 2499,
         "rows": [
           "G",
           "H",
@@ -397,7 +397,7 @@
       {
         "key": "gold",
         "name": "Gold – Main Bowl",
-        "price": 1999,
+        "price": 3999,
         "rows": [
           "D",
           "E",
@@ -411,7 +411,7 @@
       {
         "key": "platinum",
         "name": "Platinum – Front Pit",
-        "price": 2999,
+        "price": 5999,
         "rows": [
           "B",
           "C"
@@ -424,7 +424,7 @@
       {
         "key": "vip",
         "name": "VIP – Backstage Lounge",
-        "price": 4999,
+        "price": 8999,
         "rows": [
           "A"
         ],
@@ -434,7 +434,7 @@
         "quantity": 10
       }
     ],
-    "min_price": 499,
+    "min_price": 1499,
     "total_seats": 172,
     "available_count": 169,
     "is_past": false
@@ -457,7 +457,7 @@
       {
         "key": "general",
         "name": "General – Bronze Zone",
-        "price": 499,
+        "price": 699,
         "rows": [
           "J",
           "K",
@@ -471,7 +471,7 @@
       {
         "key": "silver",
         "name": "Silver – Grandstand",
-        "price": 999,
+        "price": 1199,
         "rows": [
           "G",
           "H",
@@ -522,7 +522,7 @@
         "quantity": 10
       }
     ],
-    "min_price": 499,
+    "min_price": 699,
     "total_seats": 172,
     "available_count": 170,
     "is_past": false
@@ -545,7 +545,7 @@
       {
         "key": "general",
         "name": "General – Bronze Zone",
-        "price": 499,
+        "price": 1199,
         "rows": [
           "J",
           "K",
@@ -559,7 +559,7 @@
       {
         "key": "silver",
         "name": "Silver – Grandstand",
-        "price": 999,
+        "price": 2299,
         "rows": [
           "G",
           "H",
@@ -573,7 +573,7 @@
       {
         "key": "gold",
         "name": "Gold – Main Bowl",
-        "price": 1999,
+        "price": 3999,
         "rows": [
           "D",
           "E",
@@ -587,7 +587,7 @@
       {
         "key": "platinum",
         "name": "Platinum – Front Pit",
-        "price": 2999,
+        "price": 6499,
         "rows": [
           "B",
           "C"
@@ -600,7 +600,7 @@
       {
         "key": "vip",
         "name": "VIP – Backstage Lounge",
-        "price": 4999,
+        "price": 9999,
         "rows": [
           "A"
         ],
@@ -610,7 +610,7 @@
         "quantity": 10
       }
     ],
-    "min_price": 499,
+    "min_price": 1199,
     "total_seats": 172,
     "available_count": 170,
     "is_past": false
@@ -633,7 +633,7 @@
       {
         "key": "general",
         "name": "General – Bronze Zone",
-        "price": 499,
+        "price": 799,
         "rows": [
           "J",
           "K",
@@ -647,7 +647,7 @@
       {
         "key": "silver",
         "name": "Silver – Grandstand",
-        "price": 999,
+        "price": 1499,
         "rows": [
           "G",
           "H",
@@ -661,7 +661,7 @@
       {
         "key": "gold",
         "name": "Gold – Main Bowl",
-        "price": 1999,
+        "price": 2499,
         "rows": [
           "D",
           "E",
@@ -675,7 +675,7 @@
       {
         "key": "platinum",
         "name": "Platinum – Front Pit",
-        "price": 2999,
+        "price": 3999,
         "rows": [
           "B",
           "C"
@@ -688,7 +688,7 @@
       {
         "key": "vip",
         "name": "VIP – Backstage Lounge",
-        "price": 4999,
+        "price": 6499,
         "rows": [
           "A"
         ],
@@ -698,7 +698,7 @@
         "quantity": 10
       }
     ],
-    "min_price": 499,
+    "min_price": 799,
     "total_seats": 172,
     "available_count": 172,
     "is_past": false
@@ -721,7 +721,7 @@
       {
         "key": "general",
         "name": "General – Bronze Zone",
-        "price": 499,
+        "price": 999,
         "rows": [
           "J",
           "K",
@@ -735,7 +735,7 @@
       {
         "key": "silver",
         "name": "Silver – Grandstand",
-        "price": 999,
+        "price": 1799,
         "rows": [
           "G",
           "H",
@@ -749,7 +749,7 @@
       {
         "key": "gold",
         "name": "Gold – Main Bowl",
-        "price": 1999,
+        "price": 2999,
         "rows": [
           "D",
           "E",
@@ -763,7 +763,7 @@
       {
         "key": "platinum",
         "name": "Platinum – Front Pit",
-        "price": 2999,
+        "price": 4499,
         "rows": [
           "B",
           "C"
@@ -776,7 +776,7 @@
       {
         "key": "vip",
         "name": "VIP – Backstage Lounge",
-        "price": 4999,
+        "price": 6999,
         "rows": [
           "A"
         ],
@@ -786,7 +786,7 @@
         "quantity": 10
       }
     ],
-    "min_price": 499,
+    "min_price": 999,
     "total_seats": 172,
     "available_count": 172,
     "is_past": false
@@ -809,7 +809,7 @@
       {
         "key": "general",
         "name": "General – Bronze Zone",
-        "price": 499,
+        "price": 699,
         "rows": [
           "J",
           "K",
@@ -823,7 +823,7 @@
       {
         "key": "silver",
         "name": "Silver – Grandstand",
-        "price": 999,
+        "price": 1299,
         "rows": [
           "G",
           "H",
@@ -837,7 +837,7 @@
       {
         "key": "gold",
         "name": "Gold – Main Bowl",
-        "price": 1999,
+        "price": 2199,
         "rows": [
           "D",
           "E",
@@ -851,7 +851,7 @@
       {
         "key": "platinum",
         "name": "Platinum – Front Pit",
-        "price": 2999,
+        "price": 3499,
         "rows": [
           "B",
           "C"
@@ -864,7 +864,7 @@
       {
         "key": "vip",
         "name": "VIP – Backstage Lounge",
-        "price": 4999,
+        "price": 5499,
         "rows": [
           "A"
         ],
@@ -874,7 +874,7 @@
         "quantity": 10
       }
     ],
-    "min_price": 499,
+    "min_price": 699,
     "total_seats": 172,
     "available_count": 172,
     "is_past": false
@@ -897,7 +897,7 @@
       {
         "key": "general",
         "name": "General – Bronze Zone",
-        "price": 499,
+        "price": 799,
         "rows": [
           "J",
           "K",
@@ -911,7 +911,7 @@
       {
         "key": "silver",
         "name": "Silver – Grandstand",
-        "price": 999,
+        "price": 1399,
         "rows": [
           "G",
           "H",
@@ -925,7 +925,7 @@
       {
         "key": "gold",
         "name": "Gold – Main Bowl",
-        "price": 1999,
+        "price": 2399,
         "rows": [
           "D",
           "E",
@@ -939,7 +939,7 @@
       {
         "key": "platinum",
         "name": "Platinum – Front Pit",
-        "price": 2999,
+        "price": 3799,
         "rows": [
           "B",
           "C"
@@ -952,7 +952,7 @@
       {
         "key": "vip",
         "name": "VIP – Backstage Lounge",
-        "price": 4999,
+        "price": 5999,
         "rows": [
           "A"
         ],
@@ -962,7 +962,7 @@
         "quantity": 10
       }
     ],
-    "min_price": 499,
+    "min_price": 799,
     "total_seats": 172,
     "available_count": 172,
     "is_past": false

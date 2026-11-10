@@ -5,7 +5,23 @@ export interface User {
   full_name: string;
   email: string;
   mobile: string;
-  role: "customer" | "admin";
+  role: "customer" | "admin" | "card_manager";
+  created_at: string;
+}
+
+export interface DemoCard {
+  id: string;
+  user_id: string;
+  bank: "HDFC Bank" | "ICICI Bank" | "State Bank of India" | "Axis Bank";
+  card_type: "credit" | "debit";
+  first_name: string;
+  last_name: string;
+  holder_name: string;
+  number: string;
+  cvv: string;
+  expiry: string;
+  pin: string;
+  active: boolean;
   created_at: string;
 }
 

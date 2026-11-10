@@ -9,11 +9,92 @@ test.afterEach(async ({ page }) => {
   expect(errors.get(page), "Uncaught browser exceptions").toEqual([]);
 });
 
-async function login(page: Page, role: "customer" | "admin" = "customer") {
+async function login(page: Page, role: "customer" | "admin" | "card" = "customer") {
   await page.goto("/login");
-  await page.getByTestId(`demo-login-${role}-button`).click();
-  await expect(page).toHaveURL(role === "admin" ? /\/admin$/ : /\/dashboard$/);
+  await page
+    .getByTestId("login-email-input")
+    .fill(
+      role === "admin"
+        ? "admin@showkart.in"
+        : role === "card"
+          ? "cards@showkart.in"
+          : "customer@showkart.in",
+    );
+  await page
+    .getByTestId("login-password-input")
+    .fill(role === "admin" ? "Admin@123" : role === "card" ? "Cards@123" : "Customer@123");
+  await page.getByTestId("login-submit-button").click();
+  await expect(page).toHaveURL(
+    role === "admin" ? /\/admin$/ : role === "card" ? /\/cards$/ : /\/dashboard$/,
+  );
 }
+
+async function createDemoCard(page: Page) {
+  await login(page, "card");
+  const response = await page.request.post("/api/cards/generate", {
+    data: {
+      bank: "HDFC Bank",
+      card_type: "debit",
+      first_name: "Demo",
+      last_name: "Fan",
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const card = (await response.json()) as {
+    number: string;
+    holder_name: string;
+    expiry: string;
+    cvv: string;
+    pin: string;
+  };
+  await page.request.post("/api/auth/logout");
+  return card;
+}
+
+test("login hides demo credentials and can show or hide the password", async ({ page }) => {
+  await page.goto("/login");
+  const password = page.getByTestId("login-password-input");
+  await password.fill("Customer@123");
+  await expect(password).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "Show password" }).click();
+  await expect(password).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "Hide password" }).click();
+  await expect(password).toHaveAttribute("type", "password");
+  await expect(page.getByText(/one-click demo/i)).toHaveCount(0);
+  await expect(page.getByText(/Customer@123|Admin@123/)).toHaveCount(0);
+});
+
+test("card account creates multiple fictional cards and signs out from profile", async ({
+  page,
+}) => {
+  await login(page, "card");
+  await page.getByTestId("card-first-name-input").fill("College");
+  await page.getByTestId("card-last-name-input").fill("G");
+  await page.getByTestId("generate-card-button").click();
+  await expect(page.getByTestId("generated-card-list").locator("article")).toHaveCount(1);
+  await expect(page.getByText(/already exists for this name/i)).toBeVisible();
+  await expect(page.getByTestId("generate-card-button")).toBeDisabled();
+  const duplicate = await page.request.post("/api/cards/generate", {
+    data: {
+      bank: "HDFC Bank",
+      card_type: "credit",
+      first_name: "  COLLEGE ",
+      last_name: "g",
+    },
+  });
+  expect(duplicate.status()).toBe(409);
+  expect(await duplicate.text()).toContain("already exists");
+
+  await page.getByTestId("card-bank-select").click();
+  await page.getByRole("option", { name: "Axis Bank", exact: true }).click();
+  await page.getByTestId("card-type-credit").click();
+  await page.getByTestId("generate-card-button").click();
+  await expect(page.getByTestId("generated-card-list").locator("article")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Profile", exact: true }).click();
+  await page.getByTestId("card-studio-logout-button").click();
+  await expect(page).toHaveURL(/\/login$/);
+});
 
 async function hold(page: Page, seat: string) {
   const result = await page.request.post("/api/bookings/hold", {
@@ -24,29 +105,25 @@ async function hold(page: Page, seat: string) {
 }
 
 for (const role of ["customer", "admin"] as const) {
-  test(`${role} account menu opens, navigates, and logs out from the home page`, async ({
+  test(`${role} account menu links to profile and logout is only available there`, async ({
     page,
   }) => {
     await login(page, role);
     await page.goto("/");
     await page.getByTestId("navbar-user-menu").click();
     await expect(page.getByRole("menu")).toBeVisible();
-    await expect(page.getByTestId("navbar-logout-button")).toBeVisible();
-    await page
-      .getByTestId(role === "admin" ? "navbar-admin-link" : "navbar-dashboard-link")
-      .click();
-    await expect(page).toHaveURL(role === "admin" ? /\/admin$/ : /\/dashboard$/);
-    await page.getByTestId("navbar-user-menu").click();
-    await page.getByTestId("navbar-logout-button").click();
+    await expect(page.getByTestId("navbar-logout-button")).toHaveCount(0);
+    await page.getByTestId("navbar-profile-link").click();
+    await expect(page).toHaveURL(/\/dashboard\?tab=profile$/);
+    await expect(page.getByTestId("profile-logout-button")).toBeVisible();
+    await page.getByTestId("profile-logout-button").click();
     await expect(page.getByTestId("navbar-login-button")).toBeVisible();
     expect(await (await page.request.get("/api/auth/me")).json()).toBeNull();
   });
 }
 
 for (const role of ["customer", "admin"] as const) {
-  test(`${role} has responsive account controls and logout in the account menu`, async ({
-    page,
-  }) => {
+  test(`${role} has responsive account controls without menu logout`, async ({ page }) => {
     await login(page, role);
     await page.goto("/");
     for (const width of [390, 768, 1024, 1280]) {
@@ -58,17 +135,19 @@ for (const role of ["customer", "admin"] as const) {
       ).toBeTruthy();
     }
     await page.getByTestId("navbar-user-menu").click();
-    await page.getByTestId("navbar-logout-button").click();
+    await expect(page.getByTestId("navbar-logout-button")).toHaveCount(0);
+    await page.getByTestId("navbar-profile-link").click();
+    await page.getByTestId("profile-logout-button").click();
     await expect(page.getByTestId("navbar-login-button")).toBeVisible();
     expect(await (await page.request.get("/api/auth/me")).json()).toBeNull();
   });
 }
 
-test("failed account-menu logout shows an error without pretending the session ended", async ({
+test("failed profile logout shows an error without pretending the session ended", async ({
   page,
 }) => {
   await login(page);
-  await page.goto("/");
+  await page.goto("/dashboard?tab=profile");
   await page.route("**/api/auth/logout", (route) =>
     route.fulfill({
       status: 503,
@@ -76,14 +155,12 @@ test("failed account-menu logout shows an error without pretending the session e
       body: JSON.stringify({ detail: "Sign-out temporarily unavailable" }),
     }),
   );
-  await page.getByTestId("navbar-user-menu").click();
-  await page.getByTestId("navbar-logout-button").click();
+  await page.getByTestId("profile-logout-button").click();
   await expect(page.getByText("Sign-out temporarily unavailable", { exact: true })).toBeVisible();
   await expect(page.getByTestId("navbar-user-menu")).toBeVisible();
   expect(await (await page.request.get("/api/auth/me")).json()).not.toBeNull();
   await page.unroute("**/api/auth/logout");
-  await page.getByTestId("navbar-user-menu").click();
-  await page.getByTestId("navbar-logout-button").click();
+  await page.getByTestId("profile-logout-button").click();
   await expect(page.getByTestId("navbar-login-button")).toBeVisible();
 });
 
@@ -306,7 +383,7 @@ test("register, profile editing, logout, and login preserve account boundaries",
   await page.getByTestId("profile-name-input").fill("Browser Updated");
   await page.getByTestId("profile-save-button").click();
   await expect(page.getByRole("heading", { name: /Hey, Browser/ })).toBeVisible();
-  await page.getByTestId("dashboard-logout-button").click();
+  await page.getByTestId("profile-logout-button").click();
   await page.goto("/dashboard");
   await expect(page.getByText("Members only", { exact: true })).toBeVisible();
   await login(page);
@@ -349,16 +426,18 @@ test("seat selection, coupon, UPI payment, QR ticket, print, and cancellation", 
 
 for (const method of ["card", "netbanking"] as const) {
   test(`simulated ${method} payment works`, async ({ page }) => {
+    const card = method === "card" ? await createDemoCard(page) : null;
     await login(page);
     const booking = await hold(page, method === "card" ? "J3" : "J4");
     await page.goto(`/checkout?booking=${booking.id}`);
     await page.getByTestId("checkout-pay-button").click();
     await page.getByTestId(`payment-tab-${method}`).click();
-    if (method === "card") {
-      await page.getByTestId("card-number-input").fill("4111111111111111");
-      await page.getByTestId("card-name-input").fill("Demo Fan");
-      await page.getByTestId("card-expiry-input").fill("12/30");
-      await page.getByTestId("card-cvv-input").fill("123");
+    if (method === "card" && card) {
+      await page.getByTestId("card-number-input").fill(card.number);
+      await page.getByTestId("card-name-input").fill(card.holder_name);
+      await page.getByTestId("card-expiry-input").fill(card.expiry);
+      await page.getByTestId("card-cvv-input").fill(card.cvv);
+      await page.getByTestId("card-pin-input").fill(card.pin);
     } else {
       await page.getByTestId("bank-select").click();
       await page.getByRole("option", { name: "HDFC Bank", exact: true }).click();
@@ -372,10 +451,10 @@ for (const method of ["card", "netbanking"] as const) {
 test("failed payment releases the hold and cannot display a valid ticket", async ({ page }) => {
   await login(page);
   const booking = await hold(page, "J5");
-  await page.goto(`/checkout?booking=${booking.id}`);
-  await page.getByTestId("checkout-pay-button").click();
-  await page.getByTestId("simulate-payment-failure-button").click();
-  await expect(page.getByTestId("payment-modal")).toBeHidden();
+  const failure = await page.request.post(`/api/bookings/${booking.id}/pay`, {
+    data: { method: "upi", simulate_failure: true },
+  });
+  expect(failure.ok()).toBeFalsy();
   await page.goto(`/ticket/${booking.id}`);
   await expect(page.getByText("Ticket not found", { exact: true })).toBeVisible();
   const result = await page.request.get(`/api/bookings/${booking.id}`);
@@ -422,7 +501,7 @@ test("changing seats releases the previous hold before returning to the map", as
   );
 });
 
-test("mobile checkout fits and signing out closes the menu", async ({ page }) => {
+test("mobile checkout fits and menu directs sign-out through profile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page);
   const booking = await hold(page, "J9");
@@ -432,8 +511,11 @@ test("mobile checkout fits and signing out closes the menu", async ({ page }) =>
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
   ).toBeTruthy();
   await page.getByTestId("navbar-mobile-menu").click();
-  await page.getByTestId("mobile-logout-button").click();
+  await expect(page.getByTestId("mobile-logout-button")).toHaveCount(0);
+  await page.getByTestId("mobile-profile-link").click();
   await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(page).toHaveURL(/\/dashboard\?tab=profile$/);
+  await page.getByTestId("profile-logout-button").click();
   await page.goto("/dashboard");
   await expect(page.getByText("Members only", { exact: true })).toBeVisible();
 });

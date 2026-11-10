@@ -168,8 +168,8 @@ class APIRegressionTests(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["subtotal"], 499)
-        self.assertGreater(response.json()["total"], 499)
+        self.assertEqual(response.json()["subtotal"], 999)
+        self.assertGreater(response.json()["total"], 999)
         self.assertEqual(response.json()["discount"], 0)
 
     def test_invalid_seats_and_over_limit_bookings(self):

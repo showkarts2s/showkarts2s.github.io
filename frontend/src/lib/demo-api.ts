@@ -5,7 +5,15 @@ import metaSeed from "../../../backend/data/meta.json";
 import media from "../../public/demo-media/map.json";
 import { ApiError } from "./api";
 import { assetUrl } from "./assets";
-import type { Artist, Concert, Booking, User, WishlistItem, AppNotification } from "./types";
+import type {
+  Artist,
+  Concert,
+  Booking,
+  User,
+  WishlistItem,
+  AppNotification,
+  DemoCard,
+} from "./types";
 
 type Account = User & { verifier: string };
 type State = {
@@ -17,6 +25,7 @@ type State = {
   notifications: (AppNotification & { user_id: string })[];
   resets: Record<string, { code: string; expires: number }>;
   enquiries: Array<Record<string, unknown>>;
+  demo_cards: DemoCard[];
 };
 const KEY = "showkart-pages-v1";
 const SESSION = `${KEY}-session`;
@@ -46,6 +55,46 @@ async function load(): Promise<State> {
     try {
       const state = JSON.parse(saved) as State;
       state.enquiries ||= [];
+      state.demo_cards ||= [];
+      const legacyPrices = "499,999,1999,2999,4999";
+      for (const savedConcert of state.concerts) {
+        if (savedConcert.categories.map((category) => category.price).join(",") !== legacyPrices)
+          continue;
+        const seededConcert = concertsSeed.find((concert) => concert.id === savedConcert.id);
+        if (!seededConcert) continue;
+        const seededPrices = new Map(
+          seededConcert.categories.map((category) => [category.key, category.price]),
+        );
+        savedConcert.categories.forEach((category) => {
+          category.price = seededPrices.get(category.key) ?? category.price;
+        });
+        savedConcert.min_price = Math.min(
+          ...savedConcert.categories.map((category) => category.price),
+        );
+      }
+      const savedColdplay = state.concerts.find((concert) => concert.id === "c6");
+      const seededColdplay = concertsSeed.find((concert) => concert.id === "c6");
+      if (
+        savedColdplay &&
+        seededColdplay &&
+        savedColdplay.total_seats !== seededColdplay.total_seats
+      ) {
+        savedColdplay.categories = structuredClone(seededColdplay.categories);
+        savedColdplay.total_seats = seededColdplay.total_seats;
+        savedColdplay.available_count = seededColdplay.available_count;
+      }
+      if (!state.users.some((user) => user.email === "cards@showkart.in")) {
+        const userId = id();
+        state.users.push({
+          id: userId,
+          full_name: "Card Studio Manager",
+          email: "cards@showkart.in",
+          role: "card_manager",
+          mobile: "9999999999",
+          created_at: stamp(),
+          verifier: await verifier("Cards@123", userId),
+        });
+      }
       return state;
     } catch {
       fail("Browser demo data could not be read. Clear this site's storage to reset it.");
@@ -55,6 +104,7 @@ async function load(): Promise<State> {
   for (const [full_name, email, password, role] of [
     ["Demo Fan", "customer@showkart.in", "Customer@123", "customer"],
     ["Demo Administrator", "admin@showkart.in", "Admin@123", "admin"],
+    ["Card Studio Manager", "cards@showkart.in", "Cards@123", "card_manager"],
   ] as const) {
     const userId = id();
     users.push({
@@ -80,6 +130,7 @@ async function load(): Promise<State> {
     notifications: [],
     resets: {},
     enquiries: [],
+    demo_cards: [],
   };
 }
 const publicUser = (u: Account | undefined) =>
@@ -89,6 +140,22 @@ const publicUser = (u: Account | undefined) =>
       ) as unknown as User)
     : null;
 const image = (url: string) => assetUrl((media as Record<string, string>)[url] || url);
+const randomDigits = (length: number) => {
+  const values = crypto.getRandomValues(new Uint8Array(length));
+  return Array.from(values, (value) => String(value % 10)).join("");
+};
+const demoCardNumber = (s: State, bank: DemoCard["bank"]) => {
+  const prefix = {
+    "HDFC Bank": "9901",
+    "ICICI Bank": "9902",
+    "State Bank of India": "9903",
+    "Axis Bank": "9904",
+  }[bank];
+  let number = "";
+  do number = `${prefix}${randomDigits(12)}`;
+  while (s.demo_cards.some((card) => card.number === number));
+  return number;
+};
 function seats(c: Concert) {
   return c.categories.flatMap((cat) =>
     cat.rows
@@ -244,12 +311,26 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
     power_required?: boolean;
     tables_required?: number;
     message: string;
+    bank: DemoCard["bank"];
+    card_type: DemoCard["card_type"];
+    first_name: string;
+    last_name: string;
+    card_number?: string;
+    card_name?: string;
+    card_expiry?: string;
+    card_cvv?: string;
+    card_pin?: string;
   };
   const me = s.users.find((u) => u.id === sessionStorage.getItem(SESSION));
   const auth = (admin = false) => {
     if (!me) fail("Please log in", 401);
     if (admin && me.role !== "admin") fail("Administrator access required", 403);
     return me;
+  };
+  const cardManager = () => {
+    const user = auth();
+    if (user.role !== "card_manager") fail("Card Studio account required", 403);
+    return user;
   };
   const getConcert = (key: string) =>
     s.concerts.find((c) => c.id === key) || fail("Concert not found", 404);
@@ -338,6 +419,66 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
         fail("Check your new passwords");
       u.verifier = await verifier(b.new_password, u.id);
       return { message: "Password changed" };
+    }
+  }
+  if (p[0] === "cards") {
+    const user = cardManager();
+    if (method === "GET" && !p[1])
+      return s.demo_cards.filter((card) => card.user_id === user.id).toReversed();
+    if (method === "POST" && p[1] === "generate") {
+      const banks: DemoCard["bank"][] = [
+        "HDFC Bank",
+        "ICICI Bank",
+        "State Bank of India",
+        "Axis Bank",
+      ];
+      if (!banks.includes(b.bank)) fail("Choose a supported bank");
+      if (!["credit", "debit"].includes(b.card_type)) fail("Choose a card type");
+      const firstName = String(b.first_name || "")
+        .trim()
+        .replace(/\s+/g, " ");
+      const lastName = String(b.last_name || "")
+        .trim()
+        .replace(/\s+/g, " ");
+      if (firstName.length < 1 || lastName.length < 1) fail("Enter first and last name");
+      const activeCards = s.demo_cards.filter((card) => card.user_id === user.id && card.active);
+      if (activeCards.length >= 20) fail("You can keep up to 20 active demo cards", 409);
+      if (
+        activeCards.some(
+          (card) =>
+            card.bank === b.bank &&
+            card.first_name.trim().replace(/\s+/g, " ").toLocaleLowerCase() ===
+              firstName.toLocaleLowerCase() &&
+            card.last_name.trim().replace(/\s+/g, " ").toLocaleLowerCase() ===
+              lastName.toLocaleLowerCase(),
+        )
+      )
+        fail(`An active ${b.bank} card already exists for ${firstName} ${lastName}`, 409);
+      const expiryYear =
+        (new Date().getFullYear() + 2 + (crypto.getRandomValues(new Uint8Array(1))[0] % 4)) % 100;
+      const card: DemoCard = {
+        id: id(),
+        user_id: user.id,
+        bank: b.bank,
+        card_type: b.card_type,
+        first_name: firstName,
+        last_name: lastName,
+        holder_name: `${firstName} ${lastName}`,
+        number: demoCardNumber(s, b.bank),
+        cvv: randomDigits(3),
+        expiry: `${String(1 + (crypto.getRandomValues(new Uint8Array(1))[0] % 12)).padStart(2, "0")}/${String(expiryYear).padStart(2, "0")}`,
+        pin: randomDigits(4),
+        active: true,
+        created_at: stamp(),
+      };
+      s.demo_cards.push(card);
+      return card;
+    }
+    if (method === "DELETE" && p[1]) {
+      const card = s.demo_cards.find((item) => item.id === p[1] && item.user_id === user.id);
+      if (!card) fail("Demo card not found", 404);
+      card.active = false;
+      return { message: "Demo card removed" };
     }
   }
   if (p[0] === "concerts") {
@@ -485,11 +626,27 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
         fail("Simulated payment failed. Your seats were released.", 402);
       }
       if (!["upi", "card", "netbanking"].includes(b.method)) fail("Choose a payment method");
+      let paymentMethod = b.method;
+      if (b.method === "card") {
+        const cardNumber = String(b.card_number || "").replace(/\D/g, "");
+        const card = s.demo_cards.find((item) => item.number === cardNumber && item.active);
+        if (!card) fail("Use an active card generated in the ShowKart Card Studio");
+        if (
+          String(b.card_name || "")
+            .trim()
+            .toLowerCase() !== card.holder_name.toLowerCase()
+        )
+          fail("Cardholder name does not match the generated card");
+        if (b.card_expiry !== card.expiry) fail("Card expiry date is incorrect");
+        if (b.card_cvv !== card.cvv) fail("Card CVV is incorrect");
+        if (b.card_pin !== card.pin) fail("Demo card PIN is incorrect");
+        paymentMethod = `card · ${card.bank} · ${card.card_type}`;
+      }
       Object.assign(booking, {
         status: "confirmed",
         hold_expires_at: null,
         paid_at: stamp(),
-        payment_method: b.method,
+        payment_method: paymentMethod,
         payment_txn: `DEMO-${id()}`,
         tickets: booking.seats.map((seat) => ({ ...seat, ticket_id: id(), qr_token: id() })),
       });

@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field, StringConstraints
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = Path(os.getenv("SHOWKART_DB", str(ROOT / "backend" / "showkart.sqlite3")))
 app = FastAPI(title="ShowKart college demo", version="1.0.0")
+DATA_PATH = ROOT / "backend" / "data"
+CONCERT_SEEDS = json.loads((DATA_PATH / "concerts.json").read_text(encoding="utf-8-sig"))
 MEDIA_PATH = ROOT / "frontend" / "public" / "demo-media" / "map.json"
 MEDIA_MAP = json.loads(MEDIA_PATH.read_text(encoding="utf-8")) if MEDIA_PATH.exists() else {}
 ALLOWED_ORIGINS = {
@@ -32,8 +34,12 @@ ALLOWED_ORIGINS = {
     if origin.strip()
 }
 
+DEMO_CARD_EMAIL = "cards@showkart.in"
+DEMO_CARD_PASSWORD = "Cards@123"
+
 
 DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=100)]
+CardHolderName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
 
 
 @app.exception_handler(RequestValidationError)
@@ -80,10 +86,9 @@ def public_user(u):
 
 
 def seed() -> dict[str, Any]:
-    data = ROOT / "backend" / "data"
-    concerts = json.loads((data / "concerts.json").read_text(encoding="utf-8-sig"))
-    artists = json.loads((data / "artists.json").read_text(encoding="utf-8-sig"))
-    meta = json.loads((data / "meta.json").read_text(encoding="utf-8-sig"))
+    concerts = deepcopy(CONCERT_SEEDS)
+    artists = json.loads((DATA_PATH / "artists.json").read_text(encoding="utf-8-sig"))
+    meta = json.loads((DATA_PATH / "meta.json").read_text(encoding="utf-8-sig"))
     for i, c in enumerate(concerts):
         # Relative dates keep the sample events usable on presentation day.
         c["date"] = (
@@ -97,6 +102,7 @@ def seed() -> dict[str, Any]:
     for name, email, password, role in [
         ("Demo Fan", "customer@showkart.in", "Customer@123", "customer"),
         ("Demo Administrator", "admin@showkart.in", "Admin@123", "admin"),
+        ("Card Studio Manager", DEMO_CARD_EMAIL, DEMO_CARD_PASSWORD, "card_manager"),
     ]:
         u = dict(
             id=uid("u"),
@@ -120,6 +126,7 @@ def seed() -> dict[str, Any]:
         notifications=[],
         newsletter=[],
         enquiries=[],
+        demo_cards=[],
     )
 
 
@@ -136,6 +143,44 @@ def store():
         s = json.loads(row[0]) if row else seed()
         # Older local databases predate stall enquiries. Keep them forward-compatible.
         s.setdefault("enquiries", [])
+        s.setdefault("demo_cards", [])
+        # Older demo databases used the same ₹499–₹4,999 prices for every event.
+        # Apply the event-specific seed prices once, while preserving later admin edits.
+        legacy_prices = [499, 999, 1999, 2999, 4999]
+        concerts_with_legacy_prices = [
+            concert
+            for concert in s.get("concerts", {}).values()
+            if [category["price"] for category in concert.get("categories", [])]
+            == legacy_prices
+        ]
+        if concerts_with_legacy_prices:
+            seeded_by_id = {concert["id"]: concert for concert in CONCERT_SEEDS}
+            for concert in concerts_with_legacy_prices:
+                seeded = seeded_by_id.get(concert["id"])
+                if not seeded:
+                    continue
+                seeded_prices = {category["key"]: category["price"] for category in seeded["categories"]}
+                for category in concert["categories"]:
+                    if category["key"] in seeded_prices:
+                        category["price"] = seeded_prices[category["key"]]
+        # Keep existing local databases in sync with the current seeded seat layout.
+        current_c6 = s.get("concerts", {}).get("c6")
+        seeded_c6 = next((concert for concert in CONCERT_SEEDS if concert["id"] == "c6"), None)
+        if current_c6 and seeded_c6 and current_c6.get("total_seats") != seeded_c6["total_seats"]:
+            current_c6["categories"] = deepcopy(seeded_c6["categories"])
+            current_c6["total_seats"] = seeded_c6["total_seats"]
+            current_c6["available_count"] = seeded_c6["available_count"]
+        if not any(u["email"] == DEMO_CARD_EMAIL for u in s["users"].values()):
+            card_user = dict(
+                id=uid("u"),
+                full_name="Card Studio Manager",
+                email=DEMO_CARD_EMAIL,
+                mobile="9999999999",
+                role="card_manager",
+                created_at=stamp(),
+                password_hash=password_hash(DEMO_CARD_PASSWORD),
+            )
+            s["users"][card_user["id"]] = card_user
         for b in s["bookings"].values():
             c = s["concerts"].get(b["concert_id"])
             if b["status"] == "pending" and (
@@ -715,9 +760,101 @@ def apply_coupon(booking_id: str, body: Coupon, request: Request, s=State):
     return b
 
 
+class DemoCardCreate(BaseModel):
+    bank: Literal["HDFC Bank", "ICICI Bank", "State Bank of India", "Axis Bank"]
+    card_type: Literal["credit", "debit"]
+    first_name: CardHolderName
+    last_name: CardHolderName
+
+
+def card_manager(request: Request, s: dict[str, Any]) -> dict[str, Any]:
+    u = current(request, s)
+    if u["role"] != "card_manager":
+        fail("Card Studio account required", 403)
+    return u
+
+
+def new_demo_card_number(s: dict[str, Any], bank: str) -> str:
+    prefix = {
+        "HDFC Bank": "9901",
+        "ICICI Bank": "9902",
+        "State Bank of India": "9903",
+        "Axis Bank": "9904",
+    }[bank]
+    existing = {card["number"] for card in s["demo_cards"]}
+    while True:
+        number = prefix + "".join(str(secrets.randbelow(10)) for _ in range(12))
+        if number not in existing:
+            return number
+
+
+@app.get("/api/cards")
+def cards(request: Request, s=State):
+    u = card_manager(request, s)
+    return [card for card in reversed(s["demo_cards"]) if card["user_id"] == u["id"]]
+
+
+@app.post("/api/cards/generate")
+def generate_card(body: DemoCardCreate, request: Request, s=State):
+    u = card_manager(request, s)
+    owned = [card for card in s["demo_cards"] if card["user_id"] == u["id"] and card["active"]]
+    if len(owned) >= 20:
+        fail("You can keep up to 20 active demo cards", 409)
+    first_name = " ".join(body.first_name.split())
+    last_name = " ".join(body.last_name.split())
+    duplicate = next(
+        (
+            card
+            for card in owned
+            if card["bank"] == body.bank
+            and " ".join(card["first_name"].split()).casefold() == first_name.casefold()
+            and " ".join(card["last_name"].split()).casefold() == last_name.casefold()
+        ),
+        None,
+    )
+    if duplicate:
+        fail(f"An active {body.bank} card already exists for {first_name} {last_name}", 409)
+    expiry_year = (now().year + 2 + secrets.randbelow(4)) % 100
+    card = dict(
+        id=uid("dc"),
+        user_id=u["id"],
+        bank=body.bank,
+        card_type=body.card_type,
+        first_name=first_name,
+        last_name=last_name,
+        holder_name=f"{first_name} {last_name}",
+        number=new_demo_card_number(s, body.bank),
+        cvv=f"{secrets.randbelow(1000):03d}",
+        expiry=f"{1 + secrets.randbelow(12):02d}/{expiry_year:02d}",
+        pin=f"{secrets.randbelow(10000):04d}",
+        active=True,
+        created_at=stamp(),
+    )
+    s["demo_cards"].append(card)
+    return card
+
+
+@app.delete("/api/cards/{card_id}")
+def delete_card(card_id: str, request: Request, s=State):
+    u = card_manager(request, s)
+    card = next(
+        (card for card in s["demo_cards"] if card["id"] == card_id and card["user_id"] == u["id"]),
+        None,
+    )
+    if not card:
+        fail("Demo card not found", 404)
+    card["active"] = False
+    return {"message": "Demo card removed"}
+
+
 class Payment(BaseModel):
     method: Literal["upi", "card", "netbanking"]
     simulate_failure: bool = False
+    card_number: str | None = Field(default=None, max_length=24)
+    card_name: str | None = Field(default=None, max_length=100)
+    card_expiry: str | None = Field(default=None, pattern=r"^[0-9]{2}/[0-9]{2}$")
+    card_cvv: str | None = Field(default=None, pattern=r"^[0-9]{3}$")
+    card_pin: str | None = Field(default=None, pattern=r"^[0-9]{4}$")
 
 
 @app.post("/api/bookings/{booking_id}/pay")
@@ -741,11 +878,29 @@ def pay(booking_id: str, body: Payment, request: Request, response: Response, s=
         )
         response.status_code = 402
         return {"detail": "Simulated payment failed. Your seats were released."}
+    payment_method = body.method
+    if body.method == "card":
+        number = "".join(char for char in (body.card_number or "") if char.isdigit())
+        card = next(
+            (card for card in s["demo_cards"] if card["number"] == number and card["active"]),
+            None,
+        )
+        if not card:
+            fail("Use an active card generated in the ShowKart Card Studio", 400)
+        if (body.card_name or "").strip().casefold() != card["holder_name"].casefold():
+            fail("Cardholder name does not match the generated card", 400)
+        if body.card_expiry != card["expiry"]:
+            fail("Card expiry date is incorrect", 400)
+        if body.card_cvv != card["cvv"]:
+            fail("Card CVV is incorrect", 400)
+        if body.card_pin != card["pin"]:
+            fail("Demo card PIN is incorrect", 400)
+        payment_method = f"card Â· {card['bank']} Â· {card['card_type']}"
     b.update(
         status="confirmed",
         hold_expires_at=None,
         paid_at=stamp(),
-        payment_method=body.method,
+        payment_method=payment_method,
         payment_txn="DEMO-" + secrets.token_hex(6).upper(),
     )
     b["tickets"] = [

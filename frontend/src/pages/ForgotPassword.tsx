@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Info, KeyRound, Loader2, MailQuestion } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { apiPost } from "@/lib/api";
 
@@ -121,14 +122,15 @@ export default function ForgotPassword() {
             </div>
             <div>
               <Label className="text-slate-300">New password</Label>
-              <Input
-                type="password"
+              <PasswordInput
                 required
                 minLength={8}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="8+ chars, letters & numbers"
-                className="mt-1.5 border-white/10 bg-white/5 text-slate-100"
+                wrapperClassName="mt-1.5"
+                className="border-white/10 bg-white/5 text-slate-100"
+                visibilityLabel="new password"
                 data-testid="forgot-new-password-input"
               />
             </div>

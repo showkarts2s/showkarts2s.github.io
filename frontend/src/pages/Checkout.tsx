@@ -296,10 +296,10 @@ export default function Checkout() {
             className="mt-5 w-full bg-gradient-to-r from-violet-500 to-cyan-400 py-6 text-base text-white shadow-[0_0_24px_rgba(139,92,246,0.5)] hover:opacity-90"
             data-testid="checkout-pay-button"
           >
-            <Lock className="mr-2 size-4" /> Pay {inr(booking.total)} — Simulated
+            <Lock className="mr-2 size-4" /> Pay {inr(booking.total)}
           </Button>
           <p className="mt-3 text-center text-xs text-slate-500">
-            UPI · Cards · NetBanking — simulated gateway, no real money moves.
+            UPI · Cards · NetBanking · No real money is charged.
           </p>
           <Link
             to={`/booking/${booking.concert_id}/seats`}

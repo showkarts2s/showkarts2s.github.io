@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import {
+  ArrowLeft,
   CalendarDays,
   CheckCircle2,
   Download,
@@ -10,8 +11,9 @@ import {
   Mic2,
   QrCode,
   ShieldCheck,
+  TicketCheck,
+  UserRound,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiGet } from "@/lib/api";
 import { fmtDateTime, inr } from "@/lib/format";
@@ -42,10 +44,11 @@ export default function ETicket() {
   }
   if (isError || !booking || booking.status !== "confirmed") {
     return (
-      <div className="grid min-h-[70vh] place-items-center pt-24 text-center">
-        <div>
-          <p className="font-heading text-2xl font-bold text-white">Ticket not found</p>
-          <p className="mt-2 text-sm text-slate-400">
+      <div className="grid min-h-[70vh] place-items-center px-4 pt-24 text-center">
+        <div className="rounded-3xl border border-white/10 bg-[#111625] p-10">
+          <TicketCheck className="mx-auto size-10 text-slate-500" />
+          <p className="mt-4 font-heading text-2xl font-bold text-white">Ticket not found</p>
+          <p className="mt-2 max-w-md text-sm text-slate-400">
             Only confirmed bookings have valid tickets. Log in with the booking account to view
             yours.
           </p>
@@ -55,142 +58,190 @@ export default function ETicket() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 pb-16 pt-28 sm:px-6">
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p
-            className="flex items-center gap-2 text-emerald-300"
-            data-testid="ticket-success-banner"
-          >
-            <CheckCircle2 className="size-5" /> Payment successful — booking confirmed
-          </p>
-          <h1 className="mt-1 font-heading text-3xl font-extrabold tracking-tight text-white">
-            Your e-tickets
-          </h1>
-        </div>
-        <div className="flex gap-2">
-          {from !== "dashboard" && (
-            <Button
-              variant="outline"
-              className="border-white/15 text-slate-300"
-              onClick={() => navigate("/dashboard?tab=tickets")}
-              data-testid="ticket-dashboard-button"
+    <div className="ticket-page mx-auto max-w-6xl px-4 pb-20 pt-28 sm:px-6">
+      <header className="mb-7 rounded-3xl border border-white/10 bg-gradient-to-br from-violet-500/15 via-[#111625] to-cyan-400/10 p-5 sm:p-7">
+        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+          <div>
+            <p
+              className="inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1.5 text-sm font-medium text-emerald-200"
+              data-testid="ticket-success-banner"
             >
-              My tickets
+              <CheckCircle2 className="size-4" /> Payment confirmed
+            </p>
+            <h1 className="mt-3 font-heading text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+              Your e-ticket{booking.tickets.length === 1 ? "" : "s"}
+            </h1>
+            <p className="mt-2 text-sm text-slate-400">
+              Keep this pass ready on your phone or save the themed PDF.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 print:hidden">
+            {from !== "dashboard" && (
+              <Button
+                variant="outline"
+                className="border-white/15 bg-white/[0.03] text-slate-200 hover:bg-white/10"
+                onClick={() => navigate("/dashboard?tab=tickets")}
+                data-testid="ticket-dashboard-button"
+              >
+                <ArrowLeft className="mr-2 size-4" /> My tickets
+              </Button>
+            )}
+            <Button
+              className="bg-gradient-to-r from-violet-500 to-cyan-400 font-semibold text-white hover:opacity-90"
+              onClick={() => window.print()}
+              data-testid="download-ticket-pdf-button"
+            >
+              <Download className="mr-2 size-4" /> Save ticket PDF
             </Button>
-          )}
-          <Button
-            className="bg-gradient-to-r from-violet-500 to-cyan-400 text-white hover:opacity-90"
-            onClick={() => window.print()}
-            data-testid="download-ticket-pdf-button"
-          >
-            <Download className="mr-2 size-4" /> Download PDF
-          </Button>
+          </div>
         </div>
-      </div>
+      </header>
 
-      <div className="print-area space-y-5">
-        {booking.tickets.map((t, idx) => (
-          <div
-            key={t.ticket_id}
-            className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#15192E] shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
-            data-testid={`eticket-card-${t.seat_id}`}
+      <div className="print-area space-y-6">
+        {booking.tickets.map((ticket, index) => (
+          <article
+            key={ticket.ticket_id}
+            className="ticket-shell relative overflow-hidden rounded-[28px] border border-violet-300/20 bg-[#111625] shadow-[0_28px_90px_rgba(0,0,0,0.45)]"
+            data-testid={`eticket-card-${ticket.seat_id}`}
           >
             <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-violet-500 via-fuchsia-400 to-cyan-400" />
-            <div className="grid gap-0 sm:grid-cols-[1fr_240px]">
-              <div className="p-6 sm:p-8">
-                <div className="flex items-center justify-between">
+            <div className="ticket-layout grid lg:grid-cols-[minmax(0,1fr)_290px]">
+              <div className="relative p-5 sm:p-8 lg:p-9">
+                <div className="flex flex-wrap items-center justify-between gap-4">
                   <BrandLogo />
-                  <Badge variant="outline" className="border-emerald-300/40 text-emerald-200">
-                    E-Ticket
-                  </Badge>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">
+                    <TicketCheck className="size-3.5" /> Confirmed pass
+                  </span>
                 </div>
 
-                <h2 className="mt-5 font-heading text-2xl font-bold text-white">
-                  {booking.concert_title}
-                </h2>
-                <p className="mt-1 flex items-center gap-2 text-violet-300">
-                  <Mic2 className="size-4" /> {booking.artist_name}
-                </p>
-
-                <div className="mt-4 grid gap-2 text-sm text-slate-300 sm:grid-cols-2">
-                  <p className="flex items-center gap-2">
-                    <CalendarDays className="size-4 text-cyan-300" /> {fmtDateTime(booking.date)}
+                <div className="mt-7">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-300">
+                    Live concert admission
                   </p>
-                  <p className="flex items-center gap-2">
-                    <MapPin className="size-4 text-cyan-300" /> {booking.venue_name}, {booking.city}
+                  <h2 className="mt-2 max-w-2xl font-heading text-2xl font-extrabold leading-tight text-white sm:text-3xl">
+                    {booking.concert_title}
+                  </h2>
+                  <p className="mt-2 flex items-center gap-2 text-violet-200">
+                    <Mic2 className="size-4" /> {booking.artist_name}
                   </p>
                 </div>
 
-                <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  <div className="flex gap-3 rounded-2xl border border-white/8 bg-white/[0.035] p-3.5">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300">
+                      <CalendarDays className="size-4" />
+                    </span>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                        Date and time
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-100">
+                        {fmtDateTime(booking.date)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 rounded-2xl border border-white/8 bg-white/[0.035] p-3.5">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-violet-400/10 text-violet-300">
+                      <MapPin className="size-4" />
+                    </span>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                        Venue
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-100">
+                        {booking.venue_name}, {booking.city}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {[
-                    { l: "Ticket ID", v: t.ticket_id, mono: true },
-                    { l: "Booking ID", v: booking.ref, mono: true },
-                    { l: "Customer", v: booking.customer_name, mono: false },
-                    { l: "Seat", v: t.seat_id, mono: true },
-                  ].map((f) => (
+                    { label: "Seat", value: ticket.seat_id, accent: true },
+                    { label: "Category", value: ticket.category_name },
+                    { label: "Guest", value: booking.customer_name },
+                    { label: "Ticket", value: `${index + 1} of ${booking.tickets.length}` },
+                  ].map((field) => (
                     <div
-                      key={f.l}
-                      className="rounded-xl border border-white/5 bg-white/5 px-3 py-2"
+                      key={field.label}
+                      className="min-w-0 rounded-2xl border border-white/8 bg-[#181d31] px-3.5 py-3"
                     >
-                      <p className="text-[10px] uppercase tracking-wider text-slate-500">{f.l}</p>
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500">
+                        {field.label}
+                      </p>
                       <p
-                        className={`mt-0.5 text-sm font-bold text-white ${f.mono ? "font-mono" : "font-sans"}`}
+                        className={`mt-1 break-words text-sm font-bold ${field.accent ? "text-cyan-300" : "text-white"}`}
                       >
-                        {f.v}
+                        {field.value}
                       </p>
                     </div>
                   ))}
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-slate-300">
-                  <p>
-                    Ticket category:{" "}
-                    <span className="font-semibold text-white">{t.category_name}</span>
-                  </p>
-                  <p>
-                    Amount paid: <span className="font-semibold text-cyan-300">{inr(t.price)}</span>{" "}
-                    <span className="text-xs text-slate-500">(ticket base price)</span>
-                  </p>
+
+                <div className="mt-5 flex flex-col justify-between gap-4 rounded-2xl border border-white/8 bg-black/15 p-4 sm:flex-row sm:items-center">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                      Booking reference
+                    </p>
+                    <p className="mt-1 font-mono text-sm font-bold text-cyan-200">{booking.ref}</p>
+                  </div>
+                  <div className="sm:text-right">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                      Ticket amount
+                    </p>
+                    <p className="mt-1 text-lg font-extrabold text-white">{inr(ticket.price)}</p>
+                  </div>
                 </div>
-                {idx === 0 && (
-                  <p className="mt-5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                    <ShieldCheck className="size-4 text-emerald-400" /> Simulated payment — no real
-                    money charged · Payment ref:
-                    <span className="font-mono font-semibold text-slate-300">
-                      {booking.payment_txn ?? "—"}
+
+                {index === 0 && (
+                  <p className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                    <ShieldCheck className="size-4 text-emerald-400" /> Payment verified
+                    <span className="text-slate-600">|</span>
+                    <span className="font-mono text-slate-300">
+                      {booking.payment_txn ?? "Reference unavailable"}
                     </span>
                   </p>
                 )}
               </div>
 
-              <div className="relative flex flex-col items-center justify-center gap-3 border-t border-dashed border-slate-600 bg-[#121524] p-6 sm:border-l sm:border-t-0">
-                <span className="absolute -left-2.5 top-1/2 hidden size-5 -translate-y-1/2 rounded-full bg-[#090A10] sm:block" />
-                <QRCodeSVG
-                  value={`SHOWKART|${booking.ref}|${t.ticket_id}|${t.seat_id}|${t.qr_token}`}
-                  size={132}
-                  bgColor="#FFFFFF"
-                  fgColor="#090A10"
-                  className="rounded-xl bg-white p-2"
-                  data-testid="eticket-qr-code"
-                />
-                <p className="flex items-center gap-1.5 text-xs text-cyan-200">
-                  <QrCode className="size-3.5" /> QR e-ticket
+              <aside className="ticket-qr-panel relative flex flex-col items-center justify-center border-t border-dashed border-violet-300/25 bg-gradient-to-b from-[#171b32] to-[#0d1320] p-7 text-center lg:border-l lg:border-t-0">
+                <span className="absolute -left-3 top-1/2 hidden size-6 -translate-y-1/2 rounded-full border-r border-violet-300/20 bg-[#090a10] lg:block" />
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">
+                  Scan at entry
                 </p>
-                <p className="text-center text-[10px] leading-relaxed text-slate-500">
-                  Demo QR — show this ticket at presentation.
-                  <br />
-                  Carry a photo ID along with this pass.
+                <div className="mt-4 rounded-[22px] bg-white p-3 shadow-[0_0_40px_rgba(34,211,238,0.18)]">
+                  <QRCodeSVG
+                    value={`SHOWKART|${booking.ref}|${ticket.ticket_id}|${ticket.seat_id}|${ticket.qr_token}`}
+                    size={150}
+                    bgColor="#FFFFFF"
+                    fgColor="#090A10"
+                    data-testid="eticket-qr-code"
+                  />
+                </div>
+                <p className="mt-4 flex items-center gap-1.5 text-sm font-semibold text-white">
+                  <QrCode className="size-4 text-cyan-300" /> Gate-ready QR pass
                 </p>
-              </div>
+                <p className="mt-2 max-w-[210px] text-xs leading-relaxed text-slate-400">
+                  Show this code at the venue. Keep a valid photo ID with you.
+                </p>
+                <div className="mt-5 w-full border-t border-dashed border-white/10 pt-4">
+                  <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500">
+                    Ticket ID
+                  </p>
+                  <p className="mt-1 break-all font-mono text-xs font-semibold text-slate-300">
+                    {ticket.ticket_id}
+                  </p>
+                </div>
+              </aside>
             </div>
-          </div>
+          </article>
         ))}
       </div>
 
-      <p className="mt-6 text-center text-sm text-slate-400">
-        Tip: use <span className="text-cyan-300">Download PDF</span> and choose “Save as PDF” — or
-        just show the QR from your phone at the gate.
-      </p>
+      <div className="mt-6 flex items-start justify-center gap-2 text-center text-sm text-slate-400 print:hidden">
+        <UserRound className="mt-0.5 size-4 shrink-0 text-violet-300" />
+        <p>Each guest should carry their ticket and a valid photo ID to the venue.</p>
+      </div>
     </div>
   );
 }

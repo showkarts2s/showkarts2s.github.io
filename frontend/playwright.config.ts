@@ -27,7 +27,7 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: pages
-      ? "npm run preview -- --host 127.0.0.1 --port 8012"
+      ? "npm run preview -- --host 127.0.0.1 --port 8012 --base /ShowKarts2s/"
       : `"${python}" scripts/serve_e2e.py`,
     cwd: pages ? path.join(root, "frontend") : root,
     url: pages ? "http://127.0.0.1:8012/ShowKarts2s/" : "http://127.0.0.1:8011/api/health",

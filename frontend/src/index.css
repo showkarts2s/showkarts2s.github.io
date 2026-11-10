@@ -131,18 +131,106 @@
   }
 }
 
+/* Keep saved credentials consistent with the dark ShowKart form theme. */
+input.showkart-field:-webkit-autofill,
+input.showkart-field:-webkit-autofill:hover,
+input.showkart-field:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f1f5f9;
+  caret-color: #f1f5f9;
+  box-shadow: 0 0 0 1000px #15192a inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
 /* ---------- e-ticket print (Download PDF → Save as PDF) ---------- */
+@page {
+  size: A4 landscape;
+  margin: 0;
+}
+
 @media print {
+  html,
+  body,
+  #root {
+    width: 297mm;
+    min-height: 210mm;
+    margin: 0 !important;
+    background: #090a10 !important;
+    color-scheme: dark;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   body * {
     visibility: hidden;
   }
+
+  body > #root > div {
+    display: block !important;
+    min-height: 0 !important;
+  }
+
+  body header,
+  body footer {
+    display: none !important;
+  }
+
+  body main {
+    display: block !important;
+    min-height: 0 !important;
+  }
+
+  .ticket-page {
+    width: 297mm !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .ticket-page > :not(.print-area) {
+    display: none !important;
+  }
+
+  .print-area {
+    box-sizing: border-box;
+    position: static !important;
+    width: 297mm !important;
+    min-height: 0;
+    padding: 10mm !important;
+    background: #090a10 !important;
+  }
+
   .print-area,
   .print-area * {
     visibility: visible;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
-  .print-area {
-    position: absolute;
-    inset: 0;
+
+  .print-area .ticket-shell {
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    margin: 0 !important;
+    border-color: rgba(196, 181, 253, 0.28) !important;
+    background: #111625 !important;
+    box-shadow: none !important;
+  }
+
+  .print-area .ticket-shell:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .print-area .ticket-layout {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 72mm !important;
+  }
+
+  .print-area .ticket-qr-panel {
+    border-top: 0 !important;
+    border-left: 1px dashed rgba(196, 181, 253, 0.25) !important;
+    background: linear-gradient(180deg, #171b32 0%, #0d1320 100%) !important;
   }
 }
 
