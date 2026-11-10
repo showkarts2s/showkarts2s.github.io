@@ -56,6 +56,11 @@ async function load(): Promise<State> {
       const state = JSON.parse(saved) as State;
       state.enquiries ||= [];
       state.demo_cards ||= [];
+      for (const card of state.demo_cards) {
+        card.spending_limit ??= 100000;
+        card.amount_spent ??= Math.max(0, card.spending_limit - (card.available_balance ?? 100000));
+        card.available_balance ??= Math.max(0, card.spending_limit - card.amount_spent);
+      }
       const legacyPrices = "499,999,1999,2999,4999";
       for (const savedConcert of state.concerts) {
         if (savedConcert.categories.map((category) => category.price).join(",") !== legacyPrices)
@@ -144,6 +149,12 @@ const randomDigits = (length: number) => {
   const values = crypto.getRandomValues(new Uint8Array(length));
   return Array.from(values, (value) => String(value % 10)).join("");
 };
+const currency = (value: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value);
 const demoCardNumber = (s: State, bank: DemoCard["bank"]) => {
   const prefix = {
     "HDFC Bank": "9901",
@@ -248,6 +259,14 @@ function sync(s: State) {
 }
 function cancel(s: State, b: Booking) {
   if (!["pending", "confirmed"].includes(b.status)) fail("This booking cannot be cancelled", 409);
+  if (b.status === "confirmed" && b.payment_card_id && !b.payment_refunded) {
+    const card = s.demo_cards.find((item) => item.id === b.payment_card_id);
+    if (card) {
+      card.amount_spent = Math.max(0, card.amount_spent - b.total);
+      card.available_balance = Math.min(card.spending_limit, card.available_balance + b.total);
+      b.payment_refunded = true;
+    }
+  }
   b.refund_status = b.status === "confirmed" ? "Simulated refund completed" : null;
   Object.assign(b, { status: "cancelled", hold_expires_at: null, tickets: [] });
   notice(s, b, "Booking cancelled");
@@ -359,20 +378,22 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
     if (p[1] === "register") {
       const email = String(b.email).trim().toLowerCase();
       const name = String(b.full_name).trim();
+      const mobile = String(b.mobile);
       if (
         name.length < 2 ||
         !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+        !/^\d{10}$/.test(mobile) ||
         String(b.password).length < 8 ||
         b.password !== b.confirm_password
       )
-        fail("Check your name, email and matching passwords (at least 8 characters)");
+        fail("Check your name, email, 10-digit mobile number and matching passwords");
       if (s.users.some((u) => u.email === email)) fail("Email already registered", 409);
       const userId = id();
       const u: Account = {
         id: userId,
         full_name: name,
         email,
-        mobile: b.mobile,
+        mobile,
         role: "customer",
         created_at: stamp(),
         verifier: await verifier(b.password, userId),
@@ -406,7 +427,9 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
     const u = auth();
     if (p[1] === "profile") {
       if (String(b.full_name).trim().length < 2) fail("Enter your full name");
-      Object.assign(u, { full_name: String(b.full_name).trim(), mobile: b.mobile });
+      const mobile = String(b.mobile);
+      if (!/^\d{10}$/.test(mobile)) fail("Enter a valid 10-digit mobile number");
+      Object.assign(u, { full_name: String(b.full_name).trim(), mobile });
       return publicUser(u);
     }
     if (p[1] === "change-password") {
@@ -468,6 +491,9 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
         cvv: randomDigits(3),
         expiry: `${String(1 + (crypto.getRandomValues(new Uint8Array(1))[0] % 12)).padStart(2, "0")}/${String(expiryYear).padStart(2, "0")}`,
         pin: randomDigits(4),
+        spending_limit: 100000,
+        amount_spent: 0,
+        available_balance: 100000,
         active: true,
         created_at: stamp(),
       };
@@ -630,16 +656,24 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
       if (b.method === "card") {
         const cardNumber = String(b.card_number || "").replace(/\D/g, "");
         const card = s.demo_cards.find((item) => item.number === cardNumber && item.active);
-        if (!card) fail("Use an active card generated in the ShowKart Card Studio");
+        if (!card) fail("Card declined. Check the card number or use an active Card Studio card.");
         if (
           String(b.card_name || "")
             .trim()
             .toLowerCase() !== card.holder_name.toLowerCase()
         )
-          fail("Cardholder name does not match the generated card");
-        if (b.card_expiry !== card.expiry) fail("Card expiry date is incorrect");
-        if (b.card_cvv !== card.cvv) fail("Card CVV is incorrect");
-        if (b.card_pin !== card.pin) fail("Demo card PIN is incorrect");
+          fail("Payment declined. The cardholder name does not match this card.");
+        if (b.card_expiry !== card.expiry) fail("Payment declined. Check the card expiry date.");
+        if (b.card_cvv !== card.cvv) fail("Payment declined. The security code is incorrect.");
+        if (b.card_pin !== card.pin) fail("Payment declined. The card PIN is incorrect.");
+        if (card.available_balance < booking.total)
+          fail(
+            `Payment declined due to insufficient card balance. Available ${currency(card.available_balance)}; payment amount ${currency(booking.total)}.`,
+            402,
+          );
+        card.amount_spent += booking.total;
+        card.available_balance -= booking.total;
+        booking.payment_card_id = card.id;
         paymentMethod = `card · ${card.bank} · ${card.card_type}`;
       }
       Object.assign(booking, {

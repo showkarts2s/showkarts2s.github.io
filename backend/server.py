@@ -40,6 +40,7 @@ DEMO_CARD_PASSWORD = "Cards@123"
 
 DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=100)]
 CardHolderName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
+MobileNumber = Annotated[str, StringConstraints(pattern=r"^[0-9]{10}$")]
 
 
 @app.exception_handler(RequestValidationError)
@@ -144,6 +145,15 @@ def store():
         # Older local databases predate stall enquiries. Keep them forward-compatible.
         s.setdefault("enquiries", [])
         s.setdefault("demo_cards", [])
+        for card in s["demo_cards"]:
+            card.setdefault("spending_limit", 100000)
+            card.setdefault(
+                "amount_spent",
+                max(0, card["spending_limit"] - card.get("available_balance", 100000)),
+            )
+            card.setdefault(
+                "available_balance", max(0, card["spending_limit"] - card["amount_spent"])
+            )
         # Older demo databases used the same ₹499–₹4,999 prices for every event.
         # Apply the event-specific seed prices once, while preserving later admin edits.
         legacy_prices = [499, 999, 1999, 2999, 4999]
@@ -416,13 +426,13 @@ class Login(BaseModel):
 
 class Register(Login):
     full_name: DisplayName
-    mobile: str = Field(min_length=8, max_length=20)
+    mobile: MobileNumber
     confirm_password: str
 
 
 class Profile(BaseModel):
     full_name: DisplayName
-    mobile: str = Field(min_length=8, max_length=20)
+    mobile: MobileNumber
 
 
 class PasswordChange(BaseModel):
@@ -827,6 +837,9 @@ def generate_card(body: DemoCardCreate, request: Request, s=State):
         cvv=f"{secrets.randbelow(1000):03d}",
         expiry=f"{1 + secrets.randbelow(12):02d}/{expiry_year:02d}",
         pin=f"{secrets.randbelow(10000):04d}",
+        spending_limit=100000,
+        amount_spent=0,
+        available_balance=100000,
         active=True,
         created_at=stamp(),
     )
@@ -886,15 +899,24 @@ def pay(booking_id: str, body: Payment, request: Request, response: Response, s=
             None,
         )
         if not card:
-            fail("Use an active card generated in the ShowKart Card Studio", 400)
+            fail("Card declined. Check the card number or use an active Card Studio card.", 400)
         if (body.card_name or "").strip().casefold() != card["holder_name"].casefold():
-            fail("Cardholder name does not match the generated card", 400)
+            fail("Payment declined. The cardholder name does not match this card.", 400)
         if body.card_expiry != card["expiry"]:
-            fail("Card expiry date is incorrect", 400)
+            fail("Payment declined. Check the card expiry date.", 400)
         if body.card_cvv != card["cvv"]:
-            fail("Card CVV is incorrect", 400)
+            fail("Payment declined. The security code is incorrect.", 400)
         if body.card_pin != card["pin"]:
-            fail("Demo card PIN is incorrect", 400)
+            fail("Payment declined. The card PIN is incorrect.", 400)
+        if card["available_balance"] < b["total"]:
+            fail(
+                "Payment declined due to insufficient card balance. "
+                f"Available ₹{card['available_balance']:,.0f}; payment amount ₹{b['total']:,.0f}.",
+                402,
+            )
+        card["amount_spent"] += b["total"]
+        card["available_balance"] -= b["total"]
+        b["payment_card_id"] = card["id"]
         payment_method = f"card Â· {card['bank']} Â· {card['card_type']}"
     b.update(
         status="confirmed",
@@ -918,6 +940,17 @@ def pay(booking_id: str, body: Payment, request: Request, response: Response, s=
 def cancel_booking(s, b):
     if b["status"] not in ("pending", "confirmed"):
         fail("This booking cannot be cancelled", 409)
+    if b["status"] == "confirmed" and b.get("payment_card_id") and not b.get("payment_refunded"):
+        card = next(
+            (card for card in s["demo_cards"] if card["id"] == b["payment_card_id"]),
+            None,
+        )
+        if card:
+            card["amount_spent"] = max(0, card["amount_spent"] - b["total"])
+            card["available_balance"] = min(
+                card["spending_limit"], card["available_balance"] + b["total"]
+            )
+            b["payment_refunded"] = True
     b["refund_status"] = "Simulated refund completed" if b["status"] == "confirmed" else None
     b.update(status="cancelled", hold_expires_at=None, tickets=[])
     notification(s, b["user_id"], "Booking cancelled", f"{b['ref']} cancelled; seats released.")

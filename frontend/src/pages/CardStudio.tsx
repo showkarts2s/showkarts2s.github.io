@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiDelete, apiGet, apiPost } from "@/lib/api";
+import { inr } from "@/lib/format";
 import { useMe, useSession } from "@/lib/session";
 import type { DemoCard } from "@/lib/types";
 
@@ -227,7 +228,9 @@ export default function CardStudio() {
               </span>
               <div>
                 <h2 className="font-heading text-lg font-bold text-white">Generate a card</h2>
-                <p className="text-xs text-slate-500">Choose an account and card type.</p>
+                <p className="text-xs text-slate-500">
+                  Each new card starts with a ₹1,00,000 balance.
+                </p>
               </div>
             </div>
 
@@ -410,7 +413,55 @@ export default function CardStudio() {
                         </div>
 
                         <div className="p-5">
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                            <div className="grid grid-cols-3 gap-3 text-center">
+                              <div>
+                                <p className="text-[9px] uppercase tracking-wider text-slate-500">
+                                  Card limit
+                                </p>
+                                <p className="mt-1 text-xs font-semibold text-slate-200">
+                                  {inr(card.spending_limit)}
+                                </p>
+                              </div>
+                              <div className="border-x border-white/10">
+                                <p className="text-[9px] uppercase tracking-wider text-slate-500">
+                                  Spent
+                                </p>
+                                <p
+                                  className="mt-1 text-xs font-semibold text-amber-200"
+                                  data-testid="generated-card-spent"
+                                >
+                                  {inr(card.amount_spent)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[9px] uppercase tracking-wider text-slate-500">
+                                  Available
+                                </p>
+                                <p
+                                  className="mt-1 text-xs font-bold text-emerald-300"
+                                  data-testid="generated-card-balance"
+                                >
+                                  {inr(card.available_balance)}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/5">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-[width]"
+                                style={{
+                                  width: `${Math.max(
+                                    0,
+                                    Math.min(
+                                      100,
+                                      (card.available_balance / card.spending_limit) * 100,
+                                    ),
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div className="mt-4 grid grid-cols-2 gap-3">
                             <SecretField
                               label="CVV"
                               value={card.cvv}

@@ -104,7 +104,6 @@ export default function PaymentModal({
       onPaid(response.booking);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Payment failed");
-      onOpenChange(false);
     } finally {
       setBusy(false);
     }
@@ -236,7 +235,7 @@ export default function PaymentModal({
                   autoComplete="off"
                   autoCapitalize="none"
                   spellCheck={false}
-                  placeholder="yourname@bank"
+                  placeholder="Enter your UPI ID"
                   value={upiId}
                   onChange={(event) => setUpiId(event.target.value.trim())}
                   className={`mt-2 ${fieldClass}`}
@@ -268,7 +267,7 @@ export default function PaymentModal({
                     name="cc-number"
                     autoComplete="cc-number"
                     inputMode="numeric"
-                    placeholder="9901 0000 0000 0000"
+                    placeholder="Enter your card number"
                     value={card.number}
                     onChange={(event) =>
                       setCard({ ...card, number: formatCardNumber(event.target.value) })
@@ -286,7 +285,7 @@ export default function PaymentModal({
                   id="card-name"
                   name="cc-name"
                   autoComplete="cc-name"
-                  placeholder="Name printed on card"
+                  placeholder="Enter the cardholder name"
                   value={card.name}
                   onChange={(event) => setCard({ ...card, name: event.target.value })}
                   className={`mt-2 ${fieldClass}`}
@@ -322,7 +321,7 @@ export default function PaymentModal({
                     autoComplete="cc-csc"
                     inputMode="numeric"
                     maxLength={4}
-                    placeholder="•••"
+                    placeholder="Enter the 3-digit CVV"
                     value={card.cvv}
                     onChange={(event) =>
                       setCard({

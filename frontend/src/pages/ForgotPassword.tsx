@@ -72,7 +72,7 @@ export default function ForgotPassword() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@email.com"
+                placeholder="Enter your registered email address"
                 className="mt-1.5 border-white/10 bg-white/5 text-slate-100"
                 data-testid="forgot-email-input"
               />
@@ -115,7 +115,7 @@ export default function ForgotPassword() {
                 required
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="e.g. 123456"
+                placeholder="Enter the 6-digit verification code"
                 className="mt-1.5 border-white/10 bg-white/5 font-mono text-slate-100"
                 data-testid="forgot-code-input"
               />
@@ -127,7 +127,7 @@ export default function ForgotPassword() {
                 minLength={8}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="8+ chars, letters & numbers"
+                placeholder="Create a password with at least 8 characters"
                 wrapperClassName="mt-1.5"
                 className="border-white/10 bg-white/5 text-slate-100"
                 visibilityLabel="new password"

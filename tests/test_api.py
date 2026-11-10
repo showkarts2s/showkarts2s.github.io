@@ -62,6 +62,66 @@ class APIRegressionTests(unittest.TestCase):
         self.assertNotEqual(result["status"], "confirmed")
         self.assertEqual(result["tickets"], [])
 
+    def test_demo_card_balance_is_debited_rejected_and_refunded(self):
+        cards = self.client()
+        self.login(cards, "cards@showkart.in", "Cards@123")
+        created = cards.post(
+            "/api/cards/generate",
+            json={
+                "bank": "HDFC Bank",
+                "card_type": "debit",
+                "first_name": "Balance",
+                "last_name": "Tester",
+            },
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        card = created.json()
+        self.assertEqual(card["spending_limit"], 100000)
+        self.assertEqual(card["amount_spent"], 0)
+        self.assertEqual(card["available_balance"], 100000)
+
+        booking = self.hold(seats=[f"J{number}" for number in range(1, 11)])
+        payment = self.customer.post(
+            f"/api/bookings/{booking['id']}/pay",
+            json={
+                "method": "card",
+                "card_number": card["number"],
+                "card_name": card["holder_name"],
+                "card_expiry": card["expiry"],
+                "card_cvv": card["cvv"],
+                "card_pin": card["pin"],
+            },
+        )
+        self.assertEqual(payment.status_code, 200, payment.text)
+        updated = cards.get("/api/cards").json()[0]
+        self.assertEqual(updated["amount_spent"], booking["total"])
+        self.assertEqual(updated["available_balance"], 100000 - booking["total"])
+
+        cancelled = self.customer.post(f"/api/bookings/{booking['id']}/cancel")
+        self.assertEqual(cancelled.status_code, 200, cancelled.text)
+        refunded = cards.get("/api/cards").json()[0]
+        self.assertEqual(refunded["amount_spent"], 0)
+        self.assertEqual(refunded["available_balance"], 100000)
+
+        next_booking = self.hold(seats=["J1"])
+        with server.store() as state:
+            stored_card = next(item for item in state["demo_cards"] if item["id"] == card["id"])
+            stored_card["amount_spent"] = 99999
+            stored_card["available_balance"] = 1
+        declined = self.customer.post(
+            f"/api/bookings/{next_booking['id']}/pay",
+            json={
+                "method": "card",
+                "card_number": card["number"],
+                "card_name": card["holder_name"],
+                "card_expiry": card["expiry"],
+                "card_cvv": card["cvv"],
+                "card_pin": card["pin"],
+            },
+        )
+        self.assertEqual(declined.status_code, 402, declined.text)
+        self.assertIn("insufficient card balance", declined.json()["detail"])
+
     def test_rescheduling_updates_active_booking_details(self):
         booking = self.hold()
         self.customer.post(f"/api/bookings/{booking['id']}/pay", json={"method": "upi"})
@@ -224,6 +284,19 @@ class APIRegressionTests(unittest.TestCase):
         )
         self.assertGreaterEqual(response.status_code, 400, response.text)
         self.assertLess(response.status_code, 500)
+
+    def test_mobile_numbers_require_exactly_ten_digits(self):
+        for mobile in ["123456789", "12345678901", "98765abc10", "+919876543210"]:
+            response = self.customer.patch(
+                "/api/auth/profile", json={"full_name": "Demo Fan", "mobile": mobile}
+            )
+            self.assertEqual(response.status_code, 422, (mobile, response.text))
+
+        response = self.customer.patch(
+            "/api/auth/profile", json={"full_name": "Demo Fan", "mobile": "9123456789"}
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["mobile"], "9123456789")
 
     def test_missing_static_assets_return_404_not_html(self):
         for path in ["/assets/no-such-build.js", "/demo-media/missing.jpg"]:

@@ -127,7 +127,7 @@ export default function Enquiry() {
               required
               minLength={2}
               maxLength={100}
-              placeholder="Your name"
+              placeholder="Enter your full name"
               className="mt-2 border-white/10 bg-black/20"
             />
           </label>
@@ -138,7 +138,7 @@ export default function Enquiry() {
               required
               minLength={2}
               maxLength={150}
-              placeholder="Your business name"
+              placeholder="Enter your business or brand name"
               className="mt-2 border-white/10 bg-black/20"
             />
           </label>
@@ -149,7 +149,7 @@ export default function Enquiry() {
               type="email"
               required
               maxLength={254}
-              placeholder="you@example.com"
+              placeholder="Enter your business email address"
               className="mt-2 border-white/10 bg-black/20"
             />
           </label>
@@ -160,7 +160,7 @@ export default function Enquiry() {
               type="tel"
               required
               maxLength={20}
-              placeholder="+91 98765 43210"
+              placeholder="Enter your 10-digit mobile number"
               className="mt-2 border-white/10 bg-black/20"
             />
           </label>

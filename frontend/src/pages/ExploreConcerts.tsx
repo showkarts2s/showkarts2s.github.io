@@ -84,7 +84,7 @@ export default function ExploreConcerts() {
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Try 'Arijit', 'Mumbai', 'EDM'…"
+              placeholder="Search by artist, concert, city or genre"
               className="h-12 border-white/10 bg-[#121524]/85 pl-10 text-slate-100 placeholder:text-slate-500 backdrop-blur-xl"
               data-testid="explore-search-input"
             />

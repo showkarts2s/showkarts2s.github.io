@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import {
   ArrowUpRight,
-  Bell,
   CalendarDays,
   Heart,
   KeyRound,
@@ -13,8 +12,6 @@ import {
   LogOut,
   MapPin,
   Mic2,
-  QrCode,
-  Receipt,
   Ticket,
   UserRound,
   Wallet,
@@ -27,16 +24,18 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiGet, apiPost, apiPatch } from "@/lib/api";
-import { fmtDate, fmtDateTime, inr, initial, timeAgo } from "@/lib/format";
+import { fmtDate, fmtDateTime, inr, initial } from "@/lib/format";
 import { useMe, useSession } from "@/lib/session";
-import type { AppNotification, Booking, User, WishlistItem } from "@/lib/types";
+import type { Booking, User, WishlistItem } from "@/lib/types";
 
 export default function CustomerDashboard() {
   const { data: me, isLoading: meLoading } = useMe();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "bookings";
-  const setTab = (t: string) => setParams({ tab: t });
+  const requestedTab = params.get("tab");
+  const tab = requestedTab === "wishlist" || requestedTab === "profile" ? requestedTab : "activity";
+  const setTab = (nextTab: string) => setParams({ tab: nextTab });
+  const qc = useQueryClient();
 
   const { data: bookings = [] } = useQuery({
     queryKey: ["bookings", "mine"],
@@ -47,17 +46,6 @@ export default function CustomerDashboard() {
     queryKey: ["wishlist"],
     queryFn: () => apiGet<WishlistItem[]>("/wishlist"),
     enabled: !!me,
-  });
-  const { data: notifications = [] } = useQuery({
-    queryKey: ["notifications"],
-    queryFn: () => apiGet<AppNotification[]>("/notifications"),
-    enabled: !!me,
-  });
-
-  const qc = useQueryClient();
-  const markRead = useMutation({
-    mutationFn: () => apiPost("/notifications/mark-read"),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
   if (meLoading) {
@@ -93,50 +81,40 @@ export default function CustomerDashboard() {
       b.status === "failed" ||
       (b.status === "confirmed" && new Date(b.date) < now),
   );
-  const unread = notifications.filter((n) => !n.read).length;
-
-  const cancelBooking = async (b: Booking) => {
-    try {
-      await apiPost(`/bookings/${b.id}/cancel`);
-      toast.success(
-        `Booking ${b.ref} cancelled — ${b.status === "confirmed" ? "refund initiated (simulated)" : "hold released"}`,
-      );
-      qc.invalidateQueries({ queryKey: ["bookings", "mine"] });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Cancellation failed");
-    }
-  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-16 pt-28 sm:px-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <span className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 font-heading text-2xl font-bold text-white shadow-[0_0_24px_rgba(139,92,246,0.4)]">
-            {initial(me.full_name)}
-          </span>
-          <div>
-            <h1 className="font-heading text-2xl font-extrabold text-white">
-              Hey, {me.full_name.split(" ")[0]} 👋
-            </h1>
-            <p className="text-sm text-slate-400">
-              {me.email}
-              {me.role === "admin" ? " · administrator" : ""}
-            </p>
+      <section className="relative overflow-hidden rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-violet-500/15 via-[#111522] to-cyan-400/10 p-6 sm:p-8">
+        <div className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-cyan-400/10 blur-3xl" />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <span className="grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 font-heading text-2xl font-bold text-white shadow-[0_0_24px_rgba(139,92,246,0.4)]">
+              {initial(me.full_name)}
+            </span>
+            <div>
+              <h1 className="font-heading text-2xl font-extrabold text-white">
+                Hey, {me.full_name.split(" ")[0]} 👋
+              </h1>
+              <p className="text-sm text-slate-400">
+                {me.email}
+                {me.role === "admin" ? " · administrator" : ""}
+              </p>
+            </div>
           </div>
+          {me.role === "admin" && (
+            <Button
+              variant="outline"
+              className="border-amber-300/40 text-amber-200 hover:bg-amber-400/10"
+              onClick={() => navigate("/admin")}
+              data-testid="dashboard-admin-button"
+            >
+              Admin dashboard
+            </Button>
+          )}
         </div>
-        {me.role === "admin" && (
-          <Button
-            variant="outline"
-            className="border-amber-300/40 text-amber-200 hover:bg-amber-400/10"
-            onClick={() => navigate("/admin")}
-            data-testid="dashboard-admin-button"
-          >
-            Admin dashboard
-          </Button>
-        )}
-      </div>
+      </section>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+      <div className="mt-5 grid gap-4 sm:grid-cols-3">
         {[
           {
             icon: Ticket,
@@ -154,7 +132,7 @@ export default function CustomerDashboard() {
         ].map((s) => (
           <div
             key={s.label}
-            className="flex items-center gap-4 rounded-2xl border border-white/10 bg-[#121524] p-5"
+            className="flex items-center gap-4 rounded-3xl border border-white/10 bg-gradient-to-br from-[#171b2c] to-[#0e1420] p-5 shadow-[0_16px_40px_rgba(0,0,0,0.18)]"
           >
             <span className="grid size-11 place-items-center rounded-xl bg-violet-500/15">
               <s.icon className="size-5 text-violet-300" />
@@ -174,208 +152,116 @@ export default function CustomerDashboard() {
 
       <Tabs value={tab} onValueChange={setTab} className="mt-8">
         <TabsList
-          className="flex w-full flex-wrap gap-1 bg-white/5 sm:w-max"
+          className="h-auto w-full justify-start gap-1 rounded-2xl border border-white/10 bg-white/[0.04] p-1 sm:w-max"
           data-testid="dashboard-tabs"
+          aria-label="Dashboard sections"
         >
-          <TabsTrigger value="bookings">
-            <CalendarDays className="mr-1.5 inline size-4" /> My Bookings
-          </TabsTrigger>
-          <TabsTrigger value="tickets">
-            <Ticket className="mr-1.5 inline size-4" /> My Tickets
-          </TabsTrigger>
-          <TabsTrigger value="history">
-            <Receipt className="mr-1.5 inline size-4" /> History
+          <TabsTrigger value="activity" data-testid="dashboard-activity-tab">
+            <Ticket className="mr-1.5 inline size-4" /> My activity
           </TabsTrigger>
           <TabsTrigger value="wishlist">
             <Heart className="mr-1.5 inline size-4" /> Wishlist
-          </TabsTrigger>
-          <TabsTrigger value="notifications" className="relative">
-            <Bell className="mr-1.5 inline size-4" /> Alerts
-            {unread > 0 && (
-              <span className="ml-1 rounded-full bg-violet-500 px-1.5 text-[10px] font-bold text-white">
-                {unread}
-              </span>
-            )}
           </TabsTrigger>
           <TabsTrigger value="profile">
             <UserRound className="mr-1.5 inline size-4" /> Profile
           </TabsTrigger>
         </TabsList>
 
-        {/* BOOKINGS */}
-        <TabsContent value="bookings" className="mt-6 space-y-8">
+        {/* ACTIVITY: bookings, tickets and history in one place */}
+        <TabsContent value="activity" className="mt-6 space-y-8">
           {pending.length > 0 && (
             <section data-testid="dashboard-pending-bookings">
-              <h2 className="mb-3 font-heading text-lg font-bold text-amber-300">
-                Awaiting payment — complete before the hold ends
-              </h2>
-              <div className="space-y-3">
+              <SectionHeading
+                eyebrow="Action needed"
+                title="Complete your payment"
+                description="Your selected seats are waiting for payment."
+              />
+              <div className="mt-4 space-y-3">
                 {pending.map((b) => (
                   <BookingRow
                     key={b.id}
                     b={b}
-                    onCancel={cancelBooking}
                     onPay={(id) => navigate(`/checkout?booking=${id}`)}
                   />
                 ))}
               </div>
             </section>
           )}
+
           <section data-testid="dashboard-upcoming-bookings">
-            <h2 className="mb-3 font-heading text-lg font-bold text-white">Upcoming concerts</h2>
+            <SectionHeading
+              eyebrow="Upcoming"
+              title="Your shows and e-tickets"
+              description="Booking details and gate-ready QR passes are together here."
+            />
             {upcoming.length === 0 ? (
-              <EmptyState
-                icon={Mic2}
-                title="No upcoming shows yet"
-                sub="Time to fix that."
-                cta="Explore concerts"
-                to="/explore"
-                testid="dashboard-empty-bookings"
-              />
+              <div className="mt-4">
+                <EmptyState
+                  icon={Mic2}
+                  title="No upcoming shows yet"
+                  sub="Find a concert and your booking will appear here."
+                  cta="Explore concerts"
+                  to="/explore"
+                  testid="dashboard-empty-bookings"
+                />
+              </div>
             ) : (
-              <div className="space-y-3">
+              <div className="mt-4 grid gap-4 xl:grid-cols-2">
                 {upcoming.map((b) => (
                   <BookingRow
                     key={b.id}
                     b={b}
-                    onCancel={cancelBooking}
                     onViewTicket={(id) => navigate(`/ticket/${id}?from=dashboard`)}
                   />
                 ))}
               </div>
             )}
           </section>
-        </TabsContent>
 
-        {/* TICKETS */}
-        <TabsContent value="tickets" className="mt-6">
-          {upcoming.length === 0 ? (
-            <EmptyState
-              icon={QrCode}
-              title="No active e-tickets"
-              sub="Your QR tickets appear here right after a successful payment."
-              cta="Find a show"
-              to="/explore"
-              testid="dashboard-empty-tickets"
+          <section data-testid="dashboard-history-list">
+            <SectionHeading
+              eyebrow="Previous activity"
+              title="Booking history"
+              description="Past, failed and cancelled bookings remain available for reference."
             />
-          ) : (
-            <div className="grid gap-5 xl:grid-cols-2">
-              {upcoming.map((b) => {
-                const ticket = b.tickets[0];
-                const qrValue = ticket
-                  ? `SHOWKART|${b.ref}|${ticket.ticket_id}|${ticket.seat_id}|${ticket.qr_token}`
-                  : b.ref;
-                return (
-                  <Link
-                    key={b.id}
-                    to={`/ticket/${b.id}?from=dashboard`}
-                    data-testid={`ticket-view-${b.id}`}
-                    className="group relative overflow-hidden rounded-3xl border border-violet-300/15 bg-gradient-to-br from-[#171b31] via-[#121625] to-[#0c1520] p-5 shadow-[0_18px_55px_rgba(0,0,0,0.28)] transition-all hover:-translate-y-1 hover:border-cyan-300/35 hover:shadow-[0_22px_70px_rgba(34,211,238,0.08)] sm:p-6"
-                  >
-                    <span className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 via-fuchsia-400 to-cyan-400" />
-                    <div className="flex items-start justify-between gap-3">
-                      <Badge
-                        variant="outline"
-                        className="border-emerald-300/25 bg-emerald-300/10 text-emerald-200"
-                      >
-                        <Ticket className="mr-1.5 size-3.5" /> Active e-ticket
-                      </Badge>
-                      <span className="grid size-8 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-400 transition-colors group-hover:border-cyan-300/30 group-hover:text-cyan-200">
-                        <ArrowUpRight className="size-4" />
-                      </span>
-                    </div>
-
-                    <div className="mt-5 grid items-center gap-5 sm:grid-cols-[minmax(0,1fr)_126px]">
-                      <div className="min-w-0">
-                        <p className="font-heading text-xl font-bold leading-tight text-white group-hover:text-cyan-100">
-                          {b.concert_title}
+            {past.length === 0 ? (
+              <div className="mt-4">
+                <EmptyState
+                  icon={CalendarDays}
+                  title="No previous bookings"
+                  sub="Your completed booking activity will appear here."
+                  cta="Book your first show"
+                  to="/explore"
+                  testid="dashboard-empty-history"
+                />
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {past.map((b) => {
+                  const completed = b.status === "confirmed" && new Date(b.date) < now;
+                  return (
+                    <div
+                      key={b.id}
+                      className={`flex items-center gap-4 rounded-2xl border border-white/10 bg-[#111522] p-4 ${completed ? "opacity-55 grayscale" : ""}`}
+                    >
+                      <img src={b.poster_url} alt="" className="size-14 rounded-xl object-cover" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold text-white">{b.concert_title}</p>
+                        <p className="mt-1 text-sm text-slate-400">
+                          {fmtDateTime(b.date)} ? {b.seats.length} ticket
+                          {b.seats.length !== 1 ? "s" : ""}
                         </p>
-                        <div className="mt-4 space-y-2 text-sm text-slate-400">
-                          <p className="flex items-center gap-2">
-                            <CalendarDays className="size-4 shrink-0 text-cyan-300" />
-                            {fmtDateTime(b.date)}
-                          </p>
-                          <p className="flex items-center gap-2">
-                            <MapPin className="size-4 shrink-0 text-violet-300" />
-                            <span className="truncate">
-                              {b.venue_name}, {b.city}
-                            </span>
-                          </p>
-                        </div>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-                            Seat{b.seats.length === 1 ? "" : "s"}:{" "}
-                            {b.seats.map((s) => s.seat_id).join(", ")}
-                          </span>
-                          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-xs text-cyan-200">
-                            {b.ref}
-                          </span>
-                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {b.ref} ? {inr(b.total)}
+                        </p>
                       </div>
-
-                      <div className="flex items-center gap-4 sm:block">
-                        <div className="w-max rounded-2xl border border-cyan-300/20 bg-white p-2 shadow-[0_0_30px_rgba(34,211,238,0.12)]">
-                          <QRCodeSVG
-                            value={qrValue}
-                            size={92}
-                            bgColor="#FFFFFF"
-                            fgColor="#090A10"
-                          />
-                        </div>
-                        <div className="sm:text-center">
-                          <p className="mt-0 text-xs font-semibold text-cyan-200 sm:mt-2">
-                            Show QR at gate
-                          </p>
-                          <p className="mt-1 text-[10px] text-slate-500">Tap to open pass</p>
-                        </div>
-                      </div>
+                      <StatusBadge status={completed ? "completed" : b.status} />
                     </div>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* HISTORY */}
-        <TabsContent value="history" className="mt-6">
-          {past.length === 0 ? (
-            <EmptyState
-              icon={Receipt}
-              title="No past transactions"
-              sub="Booking history and payment statuses will show up here."
-              cta="Book your first show"
-              to="/explore"
-              testid="dashboard-empty-history"
-            />
-          ) : (
-            <div className="space-y-3" data-testid="dashboard-history-list">
-              {past.map((b) => (
-                <div
-                  key={b.id}
-                  className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-[#121524] p-4"
-                >
-                  <img
-                    src={b.poster_url}
-                    alt=""
-                    className="hidden size-14 rounded-xl object-cover sm:block"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-white">{b.concert_title}</p>
-                    <p className="text-sm text-slate-400">
-                      {fmtDateTime(b.date)} · {b.seats.length} ticket
-                      {b.seats.length !== 1 ? "s" : ""}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {b.ref} · paid {inr(b.total)} ·{" "}
-                      {b.status === "confirmed" ? "payment success" : b.status}
-                    </p>
-                  </div>
-                  <StatusBadge status={b.status} />
-                </div>
-              ))}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </TabsContent>
 
         {/* WISHLIST */}
@@ -453,53 +339,6 @@ export default function CustomerDashboard() {
           )}
         </TabsContent>
 
-        {/* NOTIFICATIONS */}
-        <TabsContent value="notifications" className="mt-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-heading text-lg font-bold text-white">Notification centre</h2>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-cyan-300"
-              onClick={() => markRead.mutate()}
-              disabled={unread === 0}
-              data-testid="notifications-mark-read-button"
-            >
-              Mark all read
-            </Button>
-          </div>
-          {notifications.length === 0 ? (
-            <EmptyState
-              icon={Bell}
-              title="No notifications"
-              sub="Booking confirmations, payments and reminders land here."
-              cta="Explore concerts"
-              to="/explore"
-              testid="dashboard-empty-notifications"
-            />
-          ) : (
-            <div className="space-y-3" data-testid="dashboard-notifications-list">
-              {notifications.map((n) => (
-                <div
-                  key={n.id}
-                  className={`rounded-2xl border p-4 ${n.read ? "border-white/5 bg-[#121524] opacity-70" : "border-violet-400/30 bg-violet-500/5"}`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-white">
-                      {n.title}
-                      {!n.read && (
-                        <span className="ml-2 inline-block size-2 rounded-full bg-violet-400 align-middle" />
-                      )}
-                    </p>
-                    <p className="text-xs text-slate-500">{timeAgo(n.created_at)}</p>
-                  </div>
-                  <p className="mt-1.5 text-sm text-slate-300">{n.message}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
         {/* PROFILE */}
         <TabsContent value="profile" className="mt-6">
           <ProfileSection me={me} />
@@ -511,69 +350,107 @@ export default function CustomerDashboard() {
 
 function BookingRow({
   b,
-  onCancel,
   onPay,
   onViewTicket,
 }: {
   b: Booking;
-  onCancel: (b: Booking) => void;
   onPay?: (id: string) => void;
   onViewTicket?: (id: string) => void;
 }) {
+  const ticket = b.tickets[0];
+  const qrValue = ticket
+    ? `SHOWKART|${b.ref}|${ticket.ticket_id}|${ticket.seat_id}|${ticket.qr_token}`
+    : b.ref;
+
   return (
-    <div
-      className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/10 bg-[#121524] p-4"
+    <article
+      className="group relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#171b31] via-[#121625] to-[#0b111c] p-5 shadow-[0_18px_45px_rgba(0,0,0,0.2)]"
       data-testid={`booking-row-${b.ref}`}
     >
-      <img src={b.poster_url} alt="" className="hidden size-16 rounded-xl object-cover sm:block" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-heading font-bold text-white">{b.concert_title}</p>
-        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-400">
-          <span className="flex items-center gap-1.5">
-            <CalendarDays className="size-3.5 text-violet-400" /> {fmtDateTime(b.date)}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <MapPin className="size-3.5 text-violet-400" /> {b.venue_name}, {b.city}
-          </span>
-        </p>
-        <p className="mt-1 text-xs text-slate-500">
-          {b.ref} · {b.seats.length} ticket{b.seats.length !== 1 ? "s" : ""} · seats{" "}
-          {b.seats.map((s) => s.seat_id).join(", ")} · {inr(b.total)}
-        </p>
+      <span className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 via-fuchsia-400 to-cyan-400" />
+      <div className="flex items-start gap-4">
+        <img src={b.poster_url} alt="" className="size-20 rounded-2xl object-cover shadow-lg" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="font-heading text-lg font-bold leading-tight text-white">
+                {b.concert_title}
+              </p>
+              <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <CalendarDays className="size-3.5 text-cyan-300" /> {fmtDateTime(b.date)}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="size-3.5 text-violet-300" /> {b.venue_name}, {b.city}
+                </span>
+              </p>
+            </div>
+            <StatusBadge status={b.status} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-300">
+              {b.seats.length} ticket{b.seats.length !== 1 ? "s" : ""}
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-300">
+              Seat{b.seats.length !== 1 ? "s" : ""} {b.seats.map((s) => s.seat_id).join(", ")}
+            </span>
+            <span className="rounded-full border border-cyan-300/15 bg-cyan-300/5 px-3 py-1 font-mono text-cyan-200">
+              {b.ref}
+            </span>
+          </div>
+        </div>
       </div>
-      <StatusBadge status={b.status} />
-      <div className="flex flex-wrap gap-2">
-        {onViewTicket && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-cyan-300/40 text-cyan-200 hover:bg-cyan-400/10"
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Amount</p>
+          <p className="mt-1 font-heading text-xl font-bold text-white">{inr(b.total)}</p>
+        </div>
+        {onViewTicket && ticket && (
+          <button
+            type="button"
             onClick={() => onViewTicket(b.id)}
+            className="flex items-center gap-3 rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.06] p-2 pr-4 text-left transition hover:border-cyan-300/40 hover:bg-cyan-300/10"
             data-testid={`booking-view-ticket-${b.ref}`}
           >
-            <QrCode className="mr-1.5 size-4" /> E-ticket
-          </Button>
+            <span className="rounded-xl bg-white p-1.5">
+              <QRCodeSVG value={qrValue} size={48} bgColor="#FFFFFF" fgColor="#090A10" />
+            </span>
+            <span>
+              <span className="block text-sm font-semibold text-cyan-100">Open e-ticket</span>
+              <span className="block text-[11px] text-slate-400">QR pass ready</span>
+            </span>
+            <ArrowUpRight className="size-4 text-cyan-300" />
+          </button>
         )}
         {onPay && (
           <Button
-            size="sm"
             className="bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
             onClick={() => onPay(b.id)}
             data-testid={`booking-pay-${b.ref}`}
           >
-            <Wallet className="mr-1.5 size-4" /> Pay now
+            <Wallet className="mr-1.5 size-4" /> Continue to payment
           </Button>
         )}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
-          onClick={() => onCancel(b)}
-          data-testid={`booking-cancel-${b.ref}`}
-        >
-          <X className="mr-1 size-4" /> Cancel
-        </Button>
       </div>
+    </article>
+  );
+}
+
+function SectionHeading({
+  eyebrow,
+  title,
+  description,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">{eyebrow}</p>
+      <h2 className="mt-1 font-heading text-xl font-bold text-white sm:text-2xl">{title}</h2>
+      <p className="mt-1 text-sm text-slate-400">{description}</p>
     </div>
   );
 }
@@ -584,6 +461,7 @@ function StatusBadge({ status }: { status: string }) {
     pending: "border-amber-300/40 text-amber-300",
     cancelled: "border-slate-400/40 text-slate-400",
     failed: "border-rose-400/40 text-rose-300",
+    completed: "border-slate-400/30 text-slate-400",
   };
   return (
     <Badge variant="outline" className={map[status] ?? ""}>
@@ -649,7 +527,7 @@ function ProfileSection({ me }: { me: User }) {
   };
 
   const saveProfile = useMutation({
-    mutationFn: () => apiPatch<User>("/auth/profile", { full_name: name, mobile }),
+    mutationFn: () => apiPatch<User>("/auth/profile", { full_name: name.trim(), mobile }),
     onSuccess: () => {
       toast.success("Profile updated");
       qc.invalidateQueries({ queryKey: ["me"] });
@@ -667,114 +545,159 @@ function ProfileSection({ me }: { me: User }) {
   });
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <div
-        className="rounded-3xl border border-white/10 bg-[#121524] p-6"
-        data-testid="profile-edit-form"
-      >
-        <h2 className="flex items-center gap-2 font-heading text-lg font-bold text-white">
-          <UserRound className="size-5 text-violet-400" /> Personal details
-        </h2>
-        <div className="mt-5 space-y-4">
-          <div>
-            <Label className="text-slate-300">Full name</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1.5 border-white/10 bg-white/5 text-slate-100"
-              data-testid="profile-name-input"
-            />
+    <div>
+      <div className="mb-6 overflow-hidden rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-violet-500/20 via-[#15192b] to-cyan-400/10 p-6 sm:p-8">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <span className="grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 font-heading text-2xl font-bold text-white shadow-[0_0_30px_rgba(34,211,238,0.18)]">
+              {initial(me.full_name)}
+            </span>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">
+                Account profile
+              </p>
+              <h2 className="mt-1 font-heading text-2xl font-bold text-white">Your profile</h2>
+              <p className="text-sm text-slate-300">
+                {me.full_name} · {me.email}
+              </p>
+            </div>
           </div>
-          <div>
-            <Label className="text-slate-300">Email</Label>
-            <Input
-              value={me.email}
-              disabled
-              className="mt-1.5 border-white/10 bg-white/5 text-slate-500"
-              data-testid="profile-email-input"
-            />
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full border border-violet-300/25 bg-violet-300/10 px-3 py-1.5 font-semibold capitalize text-violet-200">
+              {me.role === "admin" ? "Administrator" : "Customer"}
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-300">
+              Member since {new Date(me.created_at).getFullYear()}
+            </span>
           </div>
-          <div>
-            <Label className="text-slate-300">Mobile</Label>
-            <Input
-              value={mobile}
-              onChange={(e) => setMobile(e.target.value)}
-              className="mt-1.5 border-white/10 bg-white/5 text-slate-100"
-              data-testid="profile-mobile-input"
-            />
-          </div>
-          <Button
-            onClick={() => saveProfile.mutate()}
-            disabled={saveProfile.isPending}
-            className="bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
-            data-testid="profile-save-button"
-          >
-            {saveProfile.isPending && <Loader2 className="mr-2 size-4 animate-spin" />} Save changes
-          </Button>
         </div>
       </div>
-      <div
-        className="rounded-3xl border border-white/10 bg-[#121524] p-6"
-        data-testid="profile-password-form"
-      >
-        <h2 className="flex items-center gap-2 font-heading text-lg font-bold text-white">
-          <KeyRound className="size-5 text-cyan-300" /> Change password
-        </h2>
-        <div className="mt-5 space-y-4">
-          <div>
-            <Label className="text-slate-300">Current password</Label>
-            <PasswordInput
-              value={pw.current_password}
-              onChange={(e) => setPw({ ...pw, current_password: e.target.value })}
-              wrapperClassName="mt-1.5"
-              className="border-white/10 bg-white/5 text-slate-100"
-              visibilityLabel="current password"
-              data-testid="profile-current-password-input"
-            />
-          </div>
-          <div>
-            <Label className="text-slate-300">New password</Label>
-            <PasswordInput
-              value={pw.new_password}
-              onChange={(e) => setPw({ ...pw, new_password: e.target.value })}
-              placeholder="8+ chars, letters & numbers"
-              wrapperClassName="mt-1.5"
-              className="border-white/10 bg-white/5 text-slate-100"
-              visibilityLabel="new password"
-              data-testid="profile-new-password-input"
-            />
-          </div>
-          <Button
-            onClick={() => savePassword.mutate()}
-            disabled={savePassword.isPending || pw.new_password.length < 8}
-            variant="outline"
-            className="border-violet-400/40 text-violet-200 hover:bg-violet-500/10"
-            data-testid="profile-password-save-button"
-          >
-            {savePassword.isPending && <Loader2 className="mr-2 size-4 animate-spin" />} Update
-            password
-          </Button>
-        </div>
-      </div>
-      <div className="flex flex-col gap-4 rounded-3xl border border-rose-400/20 bg-rose-400/[0.04] p-6 sm:flex-row sm:items-center sm:justify-between lg:col-span-2">
-        <div>
-          <h2 className="font-heading text-lg font-bold text-white">Sign out of ShowKart</h2>
-          <p className="mt-1 text-sm text-slate-400">End your current session on this device.</p>
-        </div>
-        <Button
-          variant="outline"
-          className="border-rose-400/35 text-rose-300 hover:bg-rose-400/10 hover:text-rose-200"
-          onClick={logout}
-          disabled={loggingOut}
-          data-testid="profile-logout-button"
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div
+          className="rounded-3xl border border-white/10 bg-[#121524] p-6"
+          data-testid="profile-edit-form"
         >
-          {loggingOut ? (
-            <Loader2 className="mr-2 size-4 animate-spin" />
-          ) : (
-            <LogOut className="mr-2 size-4" />
-          )}
-          Log out
-        </Button>
+          <h2 className="flex items-center gap-2 font-heading text-lg font-bold text-white">
+            <UserRound className="size-5 text-violet-400" /> Personal details
+          </h2>
+          <div className="mt-5 space-y-4">
+            <div>
+              <Label className="text-slate-300">Full name</Label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter your full name"
+                className="mt-1.5 border-white/10 bg-white/5 text-slate-100"
+                data-testid="profile-name-input"
+              />
+            </div>
+            <div>
+              <Label className="text-slate-300">Email</Label>
+              <Input
+                value={me.email}
+                readOnly
+                aria-readonly="true"
+                className="mt-1.5 cursor-default border-white/10 bg-white/[0.035] text-slate-300 opacity-100"
+                data-testid="profile-email-input"
+              />
+              <p className="mt-1.5 text-xs text-slate-500">Your login email cannot be changed.</p>
+            </div>
+            <div>
+              <Label className="text-slate-300">Mobile</Label>
+              <Input
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                pattern="[0-9]{10}"
+                placeholder="Enter your 10-digit mobile number"
+                className="mt-1.5 border-white/10 bg-white/5 text-slate-100"
+                data-testid="profile-mobile-input"
+              />
+              <p
+                className={`mt-1.5 text-xs ${mobile.length > 0 && mobile.length < 10 ? "text-amber-300" : "text-slate-500"}`}
+              >
+                {mobile.length > 0 && mobile.length < 10
+                  ? `${10 - mobile.length} more digit${10 - mobile.length === 1 ? "" : "s"} required`
+                  : "Enter exactly 10 digits."}
+              </p>
+            </div>
+            <Button
+              onClick={() => saveProfile.mutate()}
+              disabled={saveProfile.isPending || name.trim().length < 2 || mobile.length !== 10}
+              className="bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
+              data-testid="profile-save-button"
+            >
+              {saveProfile.isPending && <Loader2 className="mr-2 size-4 animate-spin" />} Save
+              changes
+            </Button>
+          </div>
+        </div>
+        <div
+          className="rounded-3xl border border-white/10 bg-[#121524] p-6"
+          data-testid="profile-password-form"
+        >
+          <h2 className="flex items-center gap-2 font-heading text-lg font-bold text-white">
+            <KeyRound className="size-5 text-cyan-300" /> Change password
+          </h2>
+          <div className="mt-5 space-y-4">
+            <div>
+              <Label className="text-slate-300">Current password</Label>
+              <PasswordInput
+                value={pw.current_password}
+                onChange={(e) => setPw({ ...pw, current_password: e.target.value })}
+                placeholder="Enter your current password"
+                wrapperClassName="mt-1.5"
+                className="border-white/10 bg-white/5 text-slate-100"
+                visibilityLabel="current password"
+                data-testid="profile-current-password-input"
+              />
+            </div>
+            <div>
+              <Label className="text-slate-300">New password</Label>
+              <PasswordInput
+                value={pw.new_password}
+                onChange={(e) => setPw({ ...pw, new_password: e.target.value })}
+                placeholder="Create a password with at least 8 characters"
+                wrapperClassName="mt-1.5"
+                className="border-white/10 bg-white/5 text-slate-100"
+                visibilityLabel="new password"
+                data-testid="profile-new-password-input"
+              />
+            </div>
+            <Button
+              onClick={() => savePassword.mutate()}
+              disabled={savePassword.isPending || pw.new_password.length < 8}
+              variant="outline"
+              className="border-violet-400/40 text-violet-200 hover:bg-violet-500/10"
+              data-testid="profile-password-save-button"
+            >
+              {savePassword.isPending && <Loader2 className="mr-2 size-4 animate-spin" />} Update
+              password
+            </Button>
+          </div>
+        </div>
+        <div className="flex flex-col gap-4 rounded-3xl border border-rose-400/20 bg-rose-400/[0.04] p-6 sm:flex-row sm:items-center sm:justify-between lg:col-span-2">
+          <div>
+            <h2 className="font-heading text-lg font-bold text-white">Sign out of ShowKart</h2>
+            <p className="mt-1 text-sm text-slate-400">End your current session on this device.</p>
+          </div>
+          <Button
+            variant="outline"
+            className="border-rose-400/35 text-rose-300 hover:bg-rose-400/10 hover:text-rose-200"
+            onClick={logout}
+            disabled={loggingOut}
+            data-testid="profile-logout-button"
+          >
+            {loggingOut ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <LogOut className="mr-2 size-4" />
+            )}
+            Log out
+          </Button>
+        </div>
       </div>
     </div>
   );

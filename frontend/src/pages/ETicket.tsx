@@ -80,10 +80,10 @@ export default function ETicket() {
               <Button
                 variant="outline"
                 className="border-white/15 bg-white/[0.03] text-slate-200 hover:bg-white/10"
-                onClick={() => navigate("/dashboard?tab=tickets")}
+                onClick={() => navigate("/dashboard?tab=activity")}
                 data-testid="ticket-dashboard-button"
               >
-                <ArrowLeft className="mr-2 size-4" /> My tickets
+                <ArrowLeft className="mr-2 size-4" /> My activity
               </Button>
             )}
             <Button

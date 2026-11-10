@@ -791,7 +791,7 @@ export default function AdminDashboard() {
                 <Input
                   value={artistForm.followers}
                   onChange={(e) => setArtistForm({ ...artistForm, followers: e.target.value })}
-                  placeholder="5.2M"
+                  placeholder="Example: 5.2M followers"
                   className={inputCls}
                   data-testid="admin-artist-followers-input"
                 />

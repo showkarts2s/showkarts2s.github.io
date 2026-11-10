@@ -113,7 +113,7 @@ export default function Login() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@email.com"
+                  placeholder="Enter your email address"
                   className="showkart-field mt-2 h-12 rounded-xl border-white/10 bg-[#15192a] px-4 text-slate-100 shadow-inner placeholder:text-slate-600 focus-visible:border-cyan-300/50"
                   data-testid="login-email-input"
                 />

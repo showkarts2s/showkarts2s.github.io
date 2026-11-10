@@ -99,7 +99,7 @@ export default function Footer() {
             </li>
             <li>
               <Link to="/dashboard" className="hover:text-cyan-300">
-                My Bookings
+                My activity
               </Link>
             </li>
           </ul>
@@ -136,7 +136,7 @@ export default function Footer() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@email.com"
+              placeholder="Enter your email address"
               className="border-white/10 bg-white/5 text-slate-100 placeholder:text-slate-500"
               data-testid="newsletter-email-input"
             />

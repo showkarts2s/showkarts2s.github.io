@@ -49,7 +49,7 @@ test("project URL assets, public routes, and refreshed deep links work", async (
   expect((await page.request.get(favicon!)).ok()).toBeTruthy();
   await expect(page.getByText("Browser demo:", { exact: false })).toBeVisible();
 });
-test("fan can book, pay, reload QR ticket, and cancel without a backend", async ({ page }) => {
+test("fan can book, pay, reload the QR ticket, and view merged activity", async ({ page }) => {
   await login(page);
   await page.goto("booking/c6/seats");
   await page.locator('[data-testid^="seat-dot-"]').first().click();
@@ -61,10 +61,9 @@ test("fan can book, pay, reload QR ticket, and cancel without a backend", async 
   await expect(page).toHaveURL(/\/ticket\//);
   await page.reload();
   await expect(page.getByTestId("eticket-qr-code")).toBeVisible();
-  await page.goto("dashboard?tab=tickets");
-  await expect(page.getByText("Show QR at gate")).toBeVisible();
-  await page.getByRole("tab", { name: "My Bookings", exact: true }).click();
-  await page.locator('[data-testid^="booking-cancel-"]').first().click();
+  await page.goto("dashboard?tab=activity");
+  await expect(page.getByRole("heading", { name: "Your shows and e-tickets" })).toBeVisible();
+  await expect(page.getByText("Open e-ticket")).toBeVisible();
   await expect(page.locator('[data-testid^="booking-cancel-"]')).toHaveCount(0);
   await logout(page);
 });
@@ -78,6 +77,8 @@ test("card studio generates a card that completes a browser-only card payment", 
   await page.getByTestId("generate-card-button").click();
   const card = page.getByTestId("generated-card-list").locator("article").first();
   await expect(card).toBeVisible();
+  await expect(card.getByTestId("generated-card-balance")).toContainText("1,00,000");
+  await expect(card.getByTestId("generated-card-spent")).toContainText("0");
   await expect(page.getByText(/already exists for this name/i)).toBeVisible();
   await expect(page.getByTestId("generate-card-button")).toBeDisabled();
   const number = (await card.getByTestId("generated-card-number").innerText()).replaceAll(" ", "");
@@ -90,7 +91,9 @@ test("card studio generates a card that completes a browser-only card payment", 
 
   await login(page);
   await page.goto("booking/c6/seats");
-  await page.locator('[data-testid^="seat-dot-"]').first().click();
+  for (let number = 1; number <= 10; number += 1) {
+    await page.getByTestId(`seat-dot-J${number}`).click();
+  }
   await page.getByTestId("proceed-payment-button").click();
   await page.getByTestId("checkout-pay-button").click();
   await page.getByTestId("payment-tab-card").click();
@@ -101,7 +104,12 @@ test("card studio generates a card that completes a browser-only card payment", 
   await page.getByTestId("card-pin-input").fill(pin);
   await page.getByTestId("simulated-card-pay-button").click();
   await expect(page).toHaveURL(/\/ticket\//);
-  await expect(page.getByTestId("eticket-qr-code")).toBeVisible();
+  await expect(page.getByTestId("eticket-qr-code")).toHaveCount(10);
+  await logout(page);
+  await login(page, "card");
+  const updatedCard = page.getByTestId("generated-card-list").locator("article").first();
+  await expect(updatedCard.getByTestId("generated-card-balance")).not.toContainText("1,00,000");
+  await expect(updatedCard.getByTestId("generated-card-spent")).not.toContainText("₹0");
 });
 test("admin can load all tabs and retain event edits after reload", async ({ page }) => {
   await login(page, "admin");

@@ -239,7 +239,7 @@ export default function Checkout() {
                 <Input
                   value={coupon}
                   onChange={(e) => setCoupon(e.target.value.toUpperCase())}
-                  placeholder="e.g. SHOWCOLLEGE"
+                  placeholder="Enter a coupon code"
                   className="border-white/10 bg-white/5 font-mono text-slate-100 placeholder:text-slate-500"
                   data-testid="coupon-code-input"
                 />

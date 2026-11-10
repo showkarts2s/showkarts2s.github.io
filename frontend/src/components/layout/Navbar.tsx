@@ -1,13 +1,12 @@
 import BrandLogo from "@/components/BrandLogo";
 import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   Menu,
   ChevronDown,
-  Search,
   Ticket,
   User as UserIcon,
-  LayoutDashboard,
   ShieldCheck,
   UserPlus,
   Home as HomeIcon,
@@ -17,6 +16,8 @@ import {
   Info,
   ArrowRight,
   WalletCards,
+  Bell,
+  CheckCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -30,7 +31,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useMe } from "@/lib/session";
-import { initial } from "@/lib/format";
+import { initial, timeAgo } from "@/lib/format";
+import { apiGet, apiPost } from "@/lib/api";
+import type { AppNotification } from "@/lib/types";
 
 const LINKS = [
   { to: "/", label: "Home" },
@@ -87,16 +90,7 @@ export default function Navbar() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="hidden text-slate-300 hover:text-white md:inline-flex"
-            onClick={() => navigate("/explore")}
-            data-testid="navbar-search-button"
-          >
-            <Search className="size-4" /> Search
-          </Button>
-
+          {me && me.role !== "card_manager" && <NotificationBell testId="navbar-notifications" />}
           {me ? (
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -132,16 +126,10 @@ export default function Navbar() {
                   ) : (
                     <>
                       <DropdownMenuItem
-                        onClick={() => navigate("/dashboard")}
-                        data-testid="navbar-dashboard-link"
-                      >
-                        <LayoutDashboard className="size-4" /> My Dashboard
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => navigate("/dashboard?tab=tickets")}
+                        onClick={() => navigate("/dashboard?tab=activity")}
                         data-testid="navbar-tickets-link"
                       >
-                        <Ticket className="size-4" /> My Tickets
+                        <Ticket className="size-4" /> My activity
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => navigate("/dashboard?tab=profile")}
@@ -272,11 +260,11 @@ export default function Navbar() {
                   ) : (
                     <>
                       <Link
-                        to="/dashboard"
+                        to="/dashboard?tab=activity"
                         onClick={() => setOpen(false)}
                         className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 hover:bg-white/10"
                       >
-                        My Dashboard
+                        My activity
                       </Link>
                       <Link
                         to="/dashboard?tab=profile"
@@ -326,5 +314,88 @@ export default function Navbar() {
         </div>
       </div>
     </header>
+  );
+}
+
+function NotificationBell({ testId }: { testId: string }) {
+  const qc = useQueryClient();
+  const { data: notifications = [] } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => apiGet<AppNotification[]>("/notifications"),
+    refetchInterval: 30_000,
+  });
+  const markRead = useMutation({
+    mutationFn: () => apiPost("/notifications/mark-read"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+  const unread = notifications.filter((notification) => !notification.read).length;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className="relative grid size-9 place-items-center rounded-full border border-white/10 bg-white/[0.04] text-slate-300 outline-none transition hover:border-cyan-300/30 hover:bg-cyan-300/10 hover:text-cyan-100 focus-visible:ring-2 focus-visible:ring-cyan-300"
+        aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}
+        data-testid={testId}
+      >
+        <Bell className="size-[18px]" />
+        {unread > 0 && (
+          <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-violet-500 px-1 text-[9px] font-bold leading-4 text-white shadow-[0_0_12px_rgba(139,92,246,0.7)]">
+            {unread > 9 ? "9+" : unread}
+          </span>
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="w-[min(22rem,calc(100vw-2rem))] border-white/10 bg-[#101421] p-0 shadow-2xl"
+      >
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <div>
+            <p className="font-heading font-bold text-white">Notifications</p>
+            <p className="text-xs text-slate-500">Booking and payment updates</p>
+          </div>
+          {unread > 0 && (
+            <button
+              type="button"
+              onClick={() => markRead.mutate()}
+              className="flex items-center gap-1.5 text-xs font-medium text-cyan-300 hover:text-cyan-200"
+              data-testid={`${testId}-mark-read`}
+            >
+              <CheckCheck className="size-3.5" /> Mark read
+            </button>
+          )}
+        </div>
+        <div className="max-h-80 overflow-y-auto p-2">
+          {notifications.length === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <Bell className="mx-auto size-7 text-slate-600" />
+              <p className="mt-3 text-sm font-medium text-slate-300">You are all caught up</p>
+              <p className="mt-1 text-xs text-slate-500">New booking updates will appear here.</p>
+            </div>
+          ) : (
+            notifications.slice(0, 6).map((notification) => (
+              <div
+                key={notification.id}
+                className={`rounded-xl px-3 py-3 ${notification.read ? "opacity-60" : "bg-violet-500/[0.08]"}`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <span
+                    className={`mt-1.5 size-2 shrink-0 rounded-full ${notification.read ? "bg-slate-600" : "bg-cyan-300"}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-100">{notification.title}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                      {notification.message}
+                    </p>
+                    <p className="mt-1.5 text-[10px] text-slate-600">
+                      {timeAgo(notification.created_at)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

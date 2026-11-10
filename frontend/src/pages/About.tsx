@@ -9,7 +9,7 @@ const FAQS = [
   },
   {
     q: "How do I book tickets?",
-    a: "Open a concert, hit Book Now, pick exact seats on the interactive map, and pay via the simulated UPI/Card/NetBanking gateway. Your QR e-tickets appear instantly in My Tickets.",
+    a: "Open a concert, hit Book Now, pick exact seats on the interactive map, and pay via the simulated UPI/Card/NetBanking gateway. Your QR e-tickets appear instantly in My activity.",
   },
   {
     q: "How long are seats held during checkout?",

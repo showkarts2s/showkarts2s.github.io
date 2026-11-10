@@ -21,6 +21,9 @@ export interface DemoCard {
   cvv: string;
   expiry: string;
   pin: string;
+  spending_limit: number;
+  amount_spent: number;
+  available_balance: number;
   active: boolean;
   created_at: string;
 }
@@ -154,6 +157,8 @@ export interface Booking {
   tickets: BookingTicket[];
   payment_method?: string | null;
   payment_txn?: string | null;
+  payment_card_id?: string | null;
+  payment_refunded?: boolean;
   refund_status?: string | null;
 }
 

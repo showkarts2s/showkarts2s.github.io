@@ -5,6 +5,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "./api";
 import type { User } from "./types";
 
+const PRIVATE_QUERY_ROOTS = new Set([
+  "me",
+  "bookings",
+  "booking",
+  "wishlist",
+  "notifications",
+  "demo-cards",
+  "admin-stats",
+  "admin-concerts",
+  "admin-bookings",
+  "admin-customers",
+]);
+
 export function useMe() {
   return useQuery({
     queryKey: ["me"],
@@ -24,7 +37,15 @@ export function useSession() {
     endSession: async () => {
       await apiPost("/auth/logout");
       await qc.cancelQueries();
-      qc.clear();
+      // Publish the signed-out state before removing private queries so mounted
+      // screens immediately stop rendering the previous account's data.
+      qc.setQueryData(["me"], null);
+      qc.setQueryData(["bookings", "mine"], []);
+      qc.setQueryData(["wishlist"], []);
+      qc.setQueryData(["notifications"], []);
+      qc.removeQueries({
+        predicate: (query) => PRIVATE_QUERY_ROOTS.has(String(query.queryKey[0] ?? "")),
+      });
       qc.setQueryData(["me"], null);
     },
   };

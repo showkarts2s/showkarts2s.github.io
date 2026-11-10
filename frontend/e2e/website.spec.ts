@@ -53,6 +53,7 @@ async function createDemoCard(page: Page) {
 
 test("login hides demo credentials and can show or hide the password", async ({ page }) => {
   await page.goto("/login");
+  await expect(page.getByTestId("navbar-search-button")).toHaveCount(0);
   const password = page.getByTestId("login-password-input");
   await password.fill("Customer@123");
   await expect(password).toHaveAttribute("type", "password");
@@ -113,6 +114,7 @@ for (const role of ["customer", "admin"] as const) {
     await page.getByTestId("navbar-user-menu").click();
     await expect(page.getByRole("menu")).toBeVisible();
     await expect(page.getByTestId("navbar-logout-button")).toHaveCount(0);
+    await expect(page.getByRole("menuitem", { name: "My Dashboard" })).toHaveCount(0);
     await page.getByTestId("navbar-profile-link").click();
     await expect(page).toHaveURL(/\/dashboard\?tab=profile$/);
     await expect(page.getByTestId("profile-logout-button")).toBeVisible();
@@ -317,8 +319,10 @@ test("alerts and newsletter forms call the local demo API", async ({ page }) => 
   await login(page);
   const booking = await hold(page, "J12");
   expect((await page.request.post(`/api/bookings/${booking.id}/cancel`)).ok()).toBeTruthy();
-  await page.goto("/dashboard?tab=notifications");
-  await page.getByTestId("notifications-mark-read-button").click();
+  await page.goto("/dashboard");
+  await page.getByTestId("navbar-notifications").click();
+  await page.getByTestId("navbar-notifications-mark-read").click();
+  await page.keyboard.press("Escape");
   await expect
     .poll(async () =>
       (await (await page.request.get("/api/notifications")).json()).every(
@@ -330,6 +334,43 @@ test("alerts and newsletter forms call the local demo API", async ({ page }) => 
   const subscribed = page.waitForResponse((response) => response.url().endsWith("/api/newsletter"));
   await page.getByTestId("newsletter-subscribe-button").click();
   expect((await subscribed).ok()).toBeTruthy();
+});
+
+test("dashboard tabs remain usable without overlapping content on narrow phones", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await login(page);
+
+  for (const width of [360, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/dashboard?tab=profile");
+    await expect(page.getByRole("heading", { name: "Your profile" })).toBeVisible();
+
+    const layout = await page.evaluate(() => {
+      const list = document.querySelector<HTMLElement>('[data-testid="dashboard-tabs"]')!;
+      const active = list.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')!;
+      const heading = [...document.querySelectorAll<HTMLElement>("h2")].find(
+        (element) => element.textContent?.trim() === "Your profile",
+      )!;
+      const listBox = list.getBoundingClientRect();
+      const activeBox = active.getBoundingClientRect();
+      const headingBox = heading.getBoundingClientRect();
+
+      return {
+        listHeight: listBox.height,
+        activeInsideList:
+          activeBox.left >= listBox.left - 1 && activeBox.right <= listBox.right + 1,
+        headingClearsTabs: headingBox.top >= listBox.bottom + 16,
+        noPageOverflow: document.documentElement.scrollWidth <= window.innerWidth,
+      };
+    });
+
+    expect(layout.listHeight).toBeLessThanOrEqual(48);
+    expect(layout.activeInsideList).toBeTruthy();
+    expect(layout.headingClearsTabs).toBeTruthy();
+    expect(layout.noPageOverflow).toBeTruthy();
+  }
 });
 
 test("a failed page bundle shows recovery controls instead of a blank website", async ({
@@ -344,6 +385,15 @@ test("a failed page bundle shows recovery controls instead of a blank website", 
 
 test("search and filters return matching events and handle empty results", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Ongoing and upcoming concerts" })).toBeVisible();
+  const upcomingImages = page.locator('[data-testid^="upcoming-row-"] img');
+  await expect(upcomingImages).toHaveCount(4);
+  for (let index = 0; index < 4; index += 1) {
+    await expect(upcomingImages.nth(index)).toBeVisible();
+  }
+  await page.getByTestId("hero-search-submit").click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("alert")).toContainText("Enter an artist, concert or city");
   await expect(page.getByTestId("hero-city-select")).toContainText("All cities");
   await page.getByTestId("hero-city-select").click();
   await page.getByRole("option", { name: "Mumbai", exact: true }).click();
@@ -380,7 +430,14 @@ test("register, profile editing, logout, and login preserve account boundaries",
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByText("browser-fan@example.com", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  const email = page.getByTestId("profile-email-input");
+  await expect(email).toHaveValue("browser-fan@example.com");
+  await expect(email).toBeEditable({ editable: false });
+  await expect(email).toBeEnabled();
   await page.getByTestId("profile-name-input").fill("Browser Updated");
+  const mobile = page.getByTestId("profile-mobile-input");
+  await mobile.fill("phone: 91234567890");
+  await expect(mobile).toHaveValue("9123456789");
   await page.getByTestId("profile-save-button").click();
   await expect(page.getByRole("heading", { name: /Hey, Browser/ })).toBeVisible();
   await page.getByTestId("profile-logout-button").click();
@@ -389,6 +446,41 @@ test("register, profile editing, logout, and login preserve account boundaries",
   await login(page);
   await expect(page.getByText("customer@showkart.in", { exact: true })).toBeVisible();
   await expect(page.getByText("browser-fan@example.com", { exact: true })).toHaveCount(0);
+});
+
+test("logout immediately removes the previous user's upcoming tickets", async ({ page }) => {
+  await login(page);
+  const seatMap = (await (await page.request.get("/api/concerts/c6/seats")).json()) as {
+    zones: { rows: { seats: { id: string; state: string }[] }[] }[];
+  };
+  const availableSeat = seatMap.zones
+    .flatMap((zone) => zone.rows)
+    .flatMap((row) => row.seats)
+    .find((seat) => seat.state === "available");
+  expect(availableSeat).toBeTruthy();
+
+  const booking = await hold(page, availableSeat!.id);
+  const payment = await page.request.post(`/api/bookings/${booking.id}/pay`, {
+    data: { method: "upi" },
+  });
+  expect(payment.ok(), await payment.text()).toBeTruthy();
+
+  await page.goto("/dashboard");
+  await expect(page.getByText(booking.ref, { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await page.getByTestId("profile-logout-button").click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByText(booking.ref, { exact: true })).toHaveCount(0);
+
+  await page.goto("/dashboard");
+  await expect(page.getByText("Members only", { exact: true })).toBeVisible();
+  await expect(page.getByText(booking.ref, { exact: true })).toHaveCount(0);
+
+  // Restore the disposable test inventory for the booking flows that follow.
+  await login(page);
+  const cleanup = await page.request.post(`/api/bookings/${booking.id}/cancel`);
+  expect(cleanup.ok(), await cleanup.text()).toBeTruthy();
+  await page.request.post("/api/auth/logout");
 });
 
 test("seat selection, coupon, UPI payment, QR ticket, print, and cancellation", async ({
@@ -418,8 +510,8 @@ test("seat selection, coupon, UPI payment, QR ticket, print, and cancellation", 
   await page.getByTestId("download-ticket-pdf-button").click();
   await expect(page.locator("body")).toHaveAttribute("data-printed", "true");
   await page.goto("/dashboard");
-  await page.getByTestId(`booking-cancel-${booking.ref}`).click();
-  await expect(page.getByTestId(`booking-row-${booking.ref}`)).toHaveCount(0);
+  await expect(page.getByTestId(`booking-cancel-${booking.ref}`)).toHaveCount(0);
+  expect((await page.request.post(`/api/bookings/${booking.id}/cancel`)).ok()).toBeTruthy();
   await page.goto(`/ticket/${bookingId}`);
   await expect(page.getByText("Ticket not found", { exact: true })).toBeVisible();
 });
@@ -433,6 +525,10 @@ for (const method of ["card", "netbanking"] as const) {
     await page.getByTestId("checkout-pay-button").click();
     await page.getByTestId(`payment-tab-${method}`).click();
     if (method === "card" && card) {
+      await expect(page.getByTestId("card-number-input")).toHaveAttribute(
+        "placeholder",
+        "Enter your card number",
+      );
       await page.getByTestId("card-number-input").fill(card.number);
       await page.getByTestId("card-name-input").fill(card.holder_name);
       await page.getByTestId("card-expiry-input").fill(card.expiry);

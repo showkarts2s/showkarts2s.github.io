@@ -179,7 +179,7 @@ export default function Register() {
                     required
                     value={form.email}
                     onChange={set("email")}
-                    placeholder="you@email.com"
+                    placeholder="Enter your email address"
                     className="showkart-field mt-2 h-12 rounded-xl border-white/10 bg-[#15192a] px-4 text-slate-100 shadow-inner placeholder:text-slate-600 focus-visible:border-cyan-300/50"
                     data-testid="register-email-input"
                   />
@@ -195,8 +195,14 @@ export default function Register() {
                     autoComplete="tel"
                     required
                     value={form.mobile}
-                    onChange={set("mobile")}
-                    placeholder="98765 43210"
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        mobile: event.target.value.replace(/\D/g, "").slice(0, 10),
+                      }))
+                    }
+                    pattern="[0-9]{10}"
+                    placeholder="Enter your 10-digit mobile number"
                     className="showkart-field mt-2 h-12 rounded-xl border-white/10 bg-[#15192a] px-4 text-slate-100 shadow-inner placeholder:text-slate-600 focus-visible:border-cyan-300/50"
                     data-testid="register-mobile-input"
                   />
@@ -215,7 +221,7 @@ export default function Register() {
                     minLength={8}
                     value={form.password}
                     onChange={set("password")}
-                    placeholder="Minimum 8 characters"
+                    placeholder="Create a password with at least 8 characters"
                     wrapperClassName="mt-2"
                     className="showkart-field h-12 rounded-xl border-white/10 bg-[#15192a] px-4 text-slate-100 shadow-inner placeholder:text-slate-600 focus-visible:border-cyan-300/50"
                     data-testid="register-password-input"
@@ -231,7 +237,7 @@ export default function Register() {
                     required
                     value={form.confirm_password}
                     onChange={set("confirm_password")}
-                    placeholder="Enter it again"
+                    placeholder="Re-enter your password"
                     wrapperClassName="mt-2"
                     className="showkart-field h-12 rounded-xl border-white/10 bg-[#15192a] px-4 text-slate-100 shadow-inner placeholder:text-slate-600 focus-visible:border-cyan-300/50"
                     visibilityLabel="password confirmation"
