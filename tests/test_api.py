@@ -265,6 +265,41 @@ class APIRegressionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIsNotNone(self.customer.get("/api/auth/me").json())
 
+    def test_local_preview_origin_can_change_state(self):
+        response = self.customer.post(
+            "/api/newsletter",
+            json={"email": "preview-origin@example.com"},
+            headers={"Origin": "http://127.0.0.1:8002"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_stall_enquiry_is_validated_and_saved(self):
+        payload = {
+            "full_name": "Campus Cafe",
+            "business_name": "Campus Cafe Foods",
+            "email": "vendor@example.com",
+            "phone": "+91 98765 43210",
+            "event_name": "Sample concert — Pune",
+            "enquiry_type": "stall",
+            "stalls": 2,
+            "stall_category": "Food & Beverage",
+            "product_description": "Fresh snacks and cold beverages",
+            "power_required": True,
+            "tables_required": 2,
+            "message": "We need two food stalls with electrical access.",
+        }
+        response = self.customer.post("/api/enquiries", json=payload)
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertRegex(response.json()["reference"], r"^ENQ-[0-9A-F]{6}$")
+        with server.store() as state:
+            saved = state["enquiries"][-1]
+            self.assertEqual(saved["email"], payload["email"])
+            self.assertEqual(saved["stalls"], 2)
+
+        payload["stalls"] = 0
+        invalid = self.customer.post("/api/enquiries", json=payload)
+        self.assertEqual(invalid.status_code, 422)
+
 
 if __name__ == "__main__":
     unittest.main()

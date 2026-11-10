@@ -9,7 +9,6 @@ import {
   Flame,
   Music2,
   Search,
-  Sparkles,
   Ticket,
   TrendingUp,
   Users,
@@ -83,10 +82,11 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <Badge className="mb-5 border border-violet-300/40 bg-violet-500/20 text-violet-200 backdrop-blur">
-              <Sparkles className="mr-1.5 inline size-3.5" /> India's concert discovery & ticket
-              booking
-            </Badge>
+            <p className="mb-5 max-w-2xl font-heading text-2xl font-bold tracking-tight sm:text-3xl">
+              <span className="bg-gradient-to-r from-violet-300 via-fuchsia-200 to-cyan-300 bg-clip-text text-transparent">
+                India&apos;s concert discovery & ticket booking
+              </span>
+            </p>
             <h1 className="max-w-3xl font-heading text-5xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-6xl lg:text-7xl">
               Feel the stage.
               <span className="block bg-gradient-to-r from-violet-400 via-fuchsia-300 to-cyan-300 bg-clip-text text-transparent">

@@ -142,7 +142,10 @@ test("mobile navigation and public pages fit the viewport", async ({ page }, tes
     ).toBeTruthy();
   }
   await page.getByTestId("navbar-mobile-menu").click();
-  await page.getByRole("link", { name: "Explore Concerts", exact: true }).last().click();
+  await page
+    .getByRole("link", { name: /Explore Concerts/ })
+    .last()
+    .click();
   await expect(page).toHaveURL(/\/explore$/);
   await expect(page.getByRole("dialog")).toBeHidden();
   await expect(page.getByRole("heading", { name: "Explore Concerts", exact: true })).toBeVisible();
@@ -433,4 +436,25 @@ test("mobile checkout fits and signing out closes the menu", async ({ page }) =>
   await expect(page.getByRole("dialog")).toBeHidden();
   await page.goto("/dashboard");
   await expect(page.getByText("Members only", { exact: true })).toBeVisible();
+});
+
+test("visitor can browse stall categories and submit a stall enquiry", async ({ page }) => {
+  await page.goto("/stalls");
+  await expect(page.getByRole("heading", { name: /Your booth/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Food & Beverage" })).toBeVisible();
+  await page.getByRole("link", { name: /Enquire about a stall/ }).click();
+  await expect(page).toHaveURL(/\/enquiry\?type=stall/);
+  const form = page.getByTestId("enquiry-form");
+  await form.locator('[name="full_name"]').fill("Campus Cafe");
+  await form.locator('[name="business_name"]').fill("Campus Cafe Foods");
+  await form.locator('[name="email"]').fill("vendor@example.com");
+  await form.locator('[name="phone"]').fill("9876543210");
+  await form.locator('[name="event_name"]').selectOption({ index: 1 });
+  await form.locator('[name="stalls"]').fill("2");
+  await form.locator('[name="stall_category"]').selectOption("Food & Beverage");
+  await form.locator('[name="product_description"]').fill("Fresh snacks and cold beverages");
+  await form.locator('[name="message"]').fill("We need two food stalls with electrical access.");
+  await form.locator('input[type="checkbox"]').last().check();
+  await page.getByTestId("enquiry-submit").click();
+  await expect(page.getByTestId("enquiry-success")).toContainText(/Reference: ENQ-/);
 });

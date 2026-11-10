@@ -108,3 +108,21 @@ test("registration, wishlist persistence and password recovery work on Pages", a
   await page.getByTestId("login-submit-button").click();
   await expect(page).toHaveURL(/#\/dashboard$/);
 });
+
+test("stall enquiry works in browser-only Pages mode", async ({ page }) => {
+  await page.goto("#/enquiry?type=stall&category=Merchandise");
+  const form = page.getByTestId("enquiry-form");
+  await form.locator('[name="full_name"]').fill("Campus Merch");
+  await form.locator('[name="business_name"]').fill("Campus Merch Store");
+  await form.locator('[name="email"]').fill("merch@example.com");
+  await form.locator('[name="phone"]').fill("9876543210");
+  await form.locator('[name="event_name"]').selectOption({ index: 1 });
+  await expect(form.locator('[name="stall_category"]')).toHaveValue("Merchandise");
+  await form.locator('[name="product_description"]').fill("College apparel and accessories");
+  await form
+    .locator('[name="message"]')
+    .fill("We need one merchandise stall near the main entrance.");
+  await form.locator('input[type="checkbox"]').last().check();
+  await page.getByTestId("enquiry-submit").click();
+  await expect(page.getByTestId("enquiry-success")).toContainText(/Reference: ENQ-/);
+});

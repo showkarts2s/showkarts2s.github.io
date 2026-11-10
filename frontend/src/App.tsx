@@ -19,6 +19,8 @@ const Login = lazy(() => import("@/pages/Login"));
 const Register = lazy(() => import("@/pages/Register"));
 const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
 const About = lazy(() => import("@/pages/About"));
+const StallBooking = lazy(() => import("@/pages/StallBooking"));
+const Enquiry = lazy(() => import("@/pages/Enquiry"));
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
@@ -58,6 +60,8 @@ export default function App() {
               <Route path="/register" element={<Register />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/about" element={<About />} />
+              <Route path="/stalls" element={<StallBooking />} />
+              <Route path="/enquiry" element={<Enquiry />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>

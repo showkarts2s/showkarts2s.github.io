@@ -1,14 +1,6 @@
-import {
-  HelpCircle,
-  Heart,
-  Lightbulb,
-  Mail,
-  MapPin,
-  Phone,
-  ShieldCheck,
-  Ticket,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { HelpCircle, Heart, Mail, MapPin, Phone, ShieldCheck, Ticket } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
+import { assetUrl } from "@/lib/assets";
 
 const FAQS = [
   {
@@ -34,15 +26,60 @@ const FAQS = [
 ];
 
 export default function About() {
+  const reduceMotion = useReducedMotion();
+
   return (
     <div className="mx-auto max-w-5xl px-4 pb-16 pt-32 sm:px-6">
-      <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-violet-900/40 via-[#121524] to-cyan-900/20 p-8 sm:p-12">
-        <Badge className="border-none bg-violet-500/90 text-white">
-          <Lightbulb className="mr-1.5 size-3.5" /> About the project
-        </Badge>
-        <h1 className="mt-4 font-heading text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
-          ShowKart – From Stage to Seat!
+      <header className="mb-10 text-center">
+        <p className="text-xs font-semibold uppercase tracking-[0.32em] text-cyan-300">
+          The story behind the experience
+        </p>
+        <h1 className="mt-3 font-heading text-5xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl">
+          <span className="bg-gradient-to-r from-violet-400 via-fuchsia-300 to-cyan-300 bg-clip-text text-transparent">
+            About the Project
+          </span>
         </h1>
+      </header>
+      <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-violet-900/40 via-[#121524] to-cyan-900/20 p-8 sm:p-12">
+        <div className="flex justify-center">
+          <motion.div
+            className="relative mx-auto grid size-24 place-items-center sm:size-28"
+            animate={reduceMotion ? undefined : { y: [0, -8, 0], rotate: [-2, 2, -2] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            aria-label="Animated ShowKart logo"
+            role="img"
+          >
+            <motion.span
+              className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-violet-500/40 via-cyan-400/20 to-amber-300/30 blur-xl"
+              animate={
+                reduceMotion
+                  ? undefined
+                  : { scale: [0.85, 1.15, 0.85], opacity: [0.45, 0.85, 0.45] }
+              }
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <motion.span
+              className="absolute inset-1 rounded-[1.75rem] border border-violet-300/30"
+              animate={reduceMotion ? undefined : { rotate: 360 }}
+              transition={{ duration: 14, repeat: Infinity, ease: "linear" }}
+            />
+            <img
+              src={assetUrl("/showkart-mark.svg")}
+              alt=""
+              className="relative size-20 drop-shadow-[0_10px_22px_rgba(6,182,212,0.35)] sm:size-24"
+            />
+            <motion.span
+              className="absolute right-0 top-1 size-2.5 rounded-full bg-cyan-300 shadow-[0_0_12px_#67e8f9]"
+              animate={
+                reduceMotion ? undefined : { scale: [0.6, 1.4, 0.6], opacity: [0.4, 1, 0.4] }
+              }
+              transition={{ duration: 1.8, repeat: Infinity }}
+            />
+          </motion.div>
+        </div>
+        <h2 className="mt-7 font-heading text-5xl font-extrabold tracking-tight text-white sm:text-6xl lg:text-7xl">
+          ShowKart – From Stage to Seat!
+        </h2>
         <p className="mt-4 max-w-3xl leading-relaxed text-slate-300">
           ShowKart is a first-year college{" "}
           <span className="text-white">Design Thinking & Innovation</span> project that reimagines

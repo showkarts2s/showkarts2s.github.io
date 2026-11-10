@@ -27,7 +27,7 @@ ALLOWED_ORIGINS = {
     origin.strip()
     for origin in os.getenv(
         "SHOWKART_ALLOWED_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8001,http://127.0.0.1:8001",
+        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8001,http://127.0.0.1:8001,http://localhost:8002,http://127.0.0.1:8002",
     ).split(",")
     if origin.strip()
 }
@@ -119,6 +119,7 @@ def seed() -> dict[str, Any]:
         wishlist=[],
         notifications=[],
         newsletter=[],
+        enquiries=[],
     )
 
 
@@ -133,6 +134,8 @@ def store():
         db.execute("BEGIN IMMEDIATE")
         row = db.execute("SELECT data FROM demo_state WHERE id=1").fetchone()
         s = json.loads(row[0]) if row else seed()
+        # Older local databases predate stall enquiries. Keep them forward-compatible.
+        s.setdefault("enquiries", [])
         for b in s["bookings"].values():
             c = s["concerts"].get(b["concert_id"])
             if b["status"] == "pending" and (
@@ -384,6 +387,21 @@ class PasswordChange(BaseModel):
 
 class EmailInput(BaseModel):
     email: str = Field(min_length=3, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+class EnquiryInput(BaseModel):
+    full_name: DisplayName
+    business_name: str = Field(min_length=2, max_length=150)
+    email: str = Field(min_length=3, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+    phone: str = Field(min_length=8, max_length=20, pattern=r"^[0-9+()\-\s]+$")
+    event_name: str = Field(min_length=2, max_length=200)
+    enquiry_type: Literal["concert", "stall", "general"]
+    stalls: int | None = Field(default=None, ge=1, le=20)
+    stall_category: str | None = Field(default=None, max_length=100)
+    product_description: str | None = Field(default=None, max_length=500)
+    power_required: bool = False
+    tables_required: int = Field(default=0, ge=0, le=10)
+    message: str = Field(min_length=10, max_length=2000)
 
 
 class Reset(EmailInput):
@@ -828,6 +846,24 @@ def newsletter(body: EmailInput, s=State):
     if email not in s["newsletter"]:
         s["newsletter"].append(email)
     return {"message": "Subscribed for this demo. No emails are sent."}
+
+
+@app.post("/api/enquiries", status_code=201)
+def create_enquiry(body: EnquiryInput, s=State):
+    if body.enquiry_type == "stall" and body.stalls is None:
+        fail("Enter the number of stalls required")
+    enquiry = {
+        "id": uid("e"),
+        "reference": "ENQ-" + secrets.token_hex(3).upper(),
+        **body.model_dump(),
+        "status": "received",
+        "created_at": stamp(),
+    }
+    s["enquiries"].append(enquiry)
+    return {
+        "reference": enquiry["reference"],
+        "message": "Your stall enquiry has been received. Our team will contact you soon.",
+    }
 
 
 @app.get("/api/admin/concerts")

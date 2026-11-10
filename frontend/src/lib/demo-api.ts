@@ -16,6 +16,7 @@ type State = {
   wishlist: (WishlistItem & { user_id: string })[];
   notifications: (AppNotification & { user_id: string })[];
   resets: Record<string, { code: string; expires: number }>;
+  enquiries: Array<Record<string, unknown>>;
 };
 const KEY = "showkart-pages-v1";
 const SESSION = `${KEY}-session`;
@@ -43,7 +44,9 @@ async function load(): Promise<State> {
   const saved = localStorage.getItem(KEY);
   if (saved) {
     try {
-      return JSON.parse(saved) as State;
+      const state = JSON.parse(saved) as State;
+      state.enquiries ||= [];
+      return state;
     } catch {
       fail("Browser demo data could not be read. Clear this site's storage to reset it.");
     }
@@ -76,6 +79,7 @@ async function load(): Promise<State> {
     wishlist: [],
     notifications: [],
     resets: {},
+    enquiries: [],
   };
 }
 const publicUser = (u: Account | undefined) =>
@@ -215,6 +219,7 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
     email: string;
     password: string;
     full_name: string;
+    business_name: string;
     mobile: string;
     confirm_password?: string;
     current_password: string;
@@ -230,6 +235,15 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
     simulate_failure: boolean;
     item_type: "artist" | "concert";
     item_id: string;
+    phone: string;
+    event_name: string;
+    enquiry_type: "concert" | "stall" | "general";
+    stalls?: number;
+    stall_category?: string;
+    product_description?: string;
+    power_required?: boolean;
+    tables_required?: number;
+    message: string;
   };
   const me = s.users.find((u) => u.id === sessionStorage.getItem(SESSION));
   const auth = (admin = false) => {
@@ -519,6 +533,46 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
     return values.toReversed();
   }
   if (p[0] === "newsletter") return { message: "Subscribed on this device. No emails are sent." };
+  if (p[0] === "enquiries" && method === "POST") {
+    const name = String(b.full_name || "").trim();
+    const businessName = String(b.business_name || "").trim();
+    const email = String(b.email || "")
+      .trim()
+      .toLowerCase();
+    const phone = String(b.phone || "").trim();
+    const eventName = String(b.event_name || "").trim();
+    const message = String(b.message || "").trim();
+    if (name.length < 2) fail("Please enter your full name");
+    if (businessName.length < 2) fail("Please enter your business or brand name");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail("Enter a valid email address");
+    if (!/^[0-9+()\-\s]{8,20}$/.test(phone)) fail("Enter a valid phone number");
+    if (eventName.length < 2) fail("Please select an event");
+    if (!["concert", "stall", "general"].includes(b.enquiry_type)) fail("Choose an enquiry type");
+    if (
+      b.enquiry_type === "stall" &&
+      (!Number.isInteger(Number(b.stalls)) || Number(b.stalls) < 1 || Number(b.stalls) > 20)
+    )
+      fail("Enter between 1 and 20 stalls");
+    if (message.length < 10) fail("Message must be at least 10 characters");
+    const reference = `ENQ-${id().replaceAll("-", "").slice(0, 6).toUpperCase()}`;
+    s.enquiries.push({
+      id: id(),
+      reference,
+      ...b,
+      full_name: name,
+      business_name: businessName,
+      email,
+      phone,
+      event_name: eventName,
+      message,
+      status: "received",
+      created_at: stamp(),
+    });
+    return {
+      reference,
+      message: "Your stall enquiry has been received. Our team will contact you soon.",
+    };
+  }
   if (p[0] === "admin") {
     auth(true);
     const paid = s.bookings.filter((b) => b.status === "confirmed");

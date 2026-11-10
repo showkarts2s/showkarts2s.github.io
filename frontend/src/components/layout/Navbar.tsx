@@ -13,6 +13,12 @@ import {
   LayoutDashboard,
   ShieldCheck,
   Sparkles,
+  Home as HomeIcon,
+  Compass,
+  Store,
+  Mic2,
+  Info,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -31,8 +37,27 @@ import { initial } from "@/lib/format";
 const LINKS = [
   { to: "/", label: "Home" },
   { to: "/explore", label: "Explore Concerts" },
+  { to: "/stalls", label: "Stall Booking" },
   { to: "/artists", label: "Artists" },
   { to: "/about", label: "About Us" },
+];
+
+const MOBILE_LINKS = [
+  { to: "/", label: "Home", description: "Discover what’s happening", icon: HomeIcon },
+  {
+    to: "/explore",
+    label: "Explore Concerts",
+    description: "Find your next live show",
+    icon: Compass,
+  },
+  {
+    to: "/stalls",
+    label: "Stall Booking",
+    description: "Showcase your brand at events",
+    icon: Store,
+  },
+  { to: "/artists", label: "Artists", description: "Meet the voices on stage", icon: Mic2 },
+  { to: "/about", label: "About Us", description: "Learn about ShowKart", icon: Info },
 ];
 
 export default function Navbar() {
@@ -178,26 +203,65 @@ export default function Navbar() {
             >
               <Menu className="size-5 text-slate-200" />
             </SheetTrigger>
-            <SheetContent side="right" className="border-white/10 bg-[#0B0E1B] text-slate-100">
-              <SheetTitle className="font-heading text-lg text-white">ShowKart</SheetTitle>
-              <nav className="mt-4 flex flex-col gap-1">
-                {LINKS.map((l) => (
-                  <Link
-                    key={l.to}
-                    to={l.to}
+            <SheetContent
+              side="right"
+              className="w-[88vw] max-w-sm overflow-y-auto border-l border-violet-400/20 bg-[#090b14] p-0 text-slate-100"
+            >
+              <div className="pointer-events-none absolute -right-20 top-24 size-56 rounded-full bg-violet-600/20 blur-[80px]" />
+              <div className="pointer-events-none absolute -left-20 bottom-20 size-52 rounded-full bg-cyan-500/10 blur-[80px]" />
+              <div className="relative border-b border-white/10 bg-gradient-to-br from-violet-500/10 to-cyan-400/5 px-5 pb-5 pt-6">
+                <BrandLogo />
+                <SheetTitle className="mt-5 font-heading text-xl font-bold text-white">
+                  Explore ShowKart
+                </SheetTitle>
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                  Concerts, artists, tickets and event opportunities in one place.
+                </p>
+              </div>
+              <nav className="relative flex flex-col gap-2 px-4 py-5">
+                {MOBILE_LINKS.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === "/"}
                     onClick={() => setOpen(false)}
-                    className="rounded-lg px-3 py-2.5 text-sm font-medium text-slate-200 hover:bg-white/5"
+                    className={({ isActive }) =>
+                      `group flex min-h-16 items-center gap-3 rounded-2xl border px-3.5 py-3 transition-all ${
+                        isActive
+                          ? "border-violet-400/40 bg-gradient-to-r from-violet-500/20 to-cyan-400/10 shadow-[0_8px_30px_rgba(139,92,246,0.12)]"
+                          : "border-transparent bg-white/[0.025] hover:border-white/10 hover:bg-white/5"
+                      }`
+                    }
                   >
-                    {l.label}
-                  </Link>
+                    {({ isActive }) => (
+                      <>
+                        <span
+                          className={`grid size-10 shrink-0 place-items-center rounded-xl ${isActive ? "bg-violet-500 text-white" : "bg-white/5 text-slate-400 group-hover:text-cyan-300"}`}
+                        >
+                          <item.icon className="size-5" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold text-white">
+                            {item.label}
+                          </span>
+                          <span className="mt-0.5 block truncate text-[11px] text-slate-500">
+                            {item.description}
+                          </span>
+                        </span>
+                        <ArrowRight
+                          className={`size-4 ${isActive ? "text-cyan-300" : "text-slate-600"}`}
+                        />
+                      </>
+                    )}
+                  </NavLink>
                 ))}
-                <div className="my-3 h-px bg-white/10" />
+                <div className="my-2 h-px bg-white/10" />
                 {me ? (
                   <>
                     <Link
                       to="/dashboard"
                       onClick={() => setOpen(false)}
-                      className="rounded-lg px-3 py-2.5 text-sm text-slate-200 hover:bg-white/5"
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 hover:bg-white/10"
                     >
                       My Dashboard
                     </Link>
@@ -205,14 +269,14 @@ export default function Navbar() {
                       <Link
                         to="/admin"
                         onClick={() => setOpen(false)}
-                        className="rounded-lg px-3 py-2.5 text-sm text-slate-200 hover:bg-white/5"
+                        className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200 hover:bg-white/10"
                       >
                         Admin Dashboard
                       </Link>
                     )}
                     <button
                       onClick={handleLogout}
-                      className="rounded-lg px-3 py-2.5 text-left text-sm text-rose-300 hover:bg-white/5"
+                      className="rounded-xl px-4 py-3 text-left text-sm font-medium text-rose-300 hover:bg-rose-400/10"
                       data-testid="mobile-logout-button"
                       disabled={loggingOut}
                     >
@@ -220,17 +284,19 @@ export default function Navbar() {
                     </button>
                   </>
                 ) : (
-                  <div className="flex flex-col gap-2 px-1">
+                  <div className="flex flex-col gap-2">
                     <Button
                       onClick={() => {
                         setOpen(false);
                         navigate("/login");
                       }}
+                      className="h-11 bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
                     >
                       <UserIcon className="size-4" /> Login
                     </Button>
                     <Button
                       variant="outline"
+                      className="h-11 border-white/10 bg-white/5 text-slate-100"
                       onClick={() => {
                         setOpen(false);
                         navigate("/register");

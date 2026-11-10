@@ -68,6 +68,16 @@ export default function Footer() {
               </Link>
             </li>
             <li>
+              <Link to="/stalls" className="hover:text-cyan-300">
+                Book a Stall
+              </Link>
+            </li>
+            <li>
+              <Link to="/enquiry?type=stall" className="hover:text-cyan-300">
+                Stall Enquiry
+              </Link>
+            </li>
+            <li>
               <Link to="/artists" className="hover:text-cyan-300">
                 Artists
               </Link>

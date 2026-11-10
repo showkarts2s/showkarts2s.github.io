@@ -51,9 +51,8 @@ export default function Login() {
         <img src={SIDE_IMG} alt="" className="aspect-[4/3] size-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#090A10] via-[#090A10]/50 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 p-10">
-          <Quote />
           <p className="mt-4 max-w-md text-xl font-heading font-bold leading-snug text-white">
-            “Two taps from discovering a show to standing under the stage lights.”
+            Two taps from discovering a show to standing under the stage lights.
           </p>
           <p className="mt-2 text-sm text-slate-400">Join thousands of fans on ShowKart (demo)</p>
         </div>
@@ -160,13 +159,5 @@ export default function Login() {
         </p>
       </div>
     </div>
-  );
-}
-
-function Quote() {
-  return (
-    <span className="grid size-10 place-items-center rounded-2xl bg-violet-500/30 font-heading text-2xl text-violet-200">
-      ”
-    </span>
   );
 }
