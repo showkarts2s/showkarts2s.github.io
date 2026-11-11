@@ -156,18 +156,23 @@ export default function CustomerDashboard() {
       <Tabs value={tab} onValueChange={setTab} className="mt-8">
         {me.role !== "admin" && (
           <TabsList
-            className="h-auto w-full justify-start gap-1 rounded-2xl border border-white/10 bg-white/[0.04] p-1 sm:w-max"
+            className="grid h-auto w-full grid-cols-3 gap-1 rounded-2xl border border-white/10 bg-white/[0.04] p-1 sm:flex sm:w-max sm:justify-start"
             data-testid="dashboard-tabs"
             aria-label="Dashboard sections"
           >
-            <TabsTrigger value="activity" data-testid="dashboard-activity-tab">
-              <Ticket className="mr-1.5 inline size-4" /> My activity
+            <TabsTrigger
+              value="activity"
+              className="min-w-0 px-2 sm:px-3"
+              data-testid="dashboard-activity-tab"
+            >
+              <Ticket className="mr-1 inline size-4 shrink-0 sm:mr-1.5" /> My activity
             </TabsTrigger>
-            <TabsTrigger value="wishlist">
-              <Heart className="mr-1.5 inline size-4" /> Wishlist
+            <TabsTrigger value="wishlist" className="min-w-0 px-2 sm:px-3">
+              <Heart className="mr-1 inline size-4 shrink-0 sm:mr-1.5" /> Wishlist
             </TabsTrigger>
-            <TabsTrigger value="profile" aria-label="Profile">
-              <UserRound className="mr-1.5 inline size-4" /> Profile &amp; settings
+            <TabsTrigger value="profile" className="min-w-0 px-2 sm:px-3" aria-label="Profile">
+              <UserRound className="mr-1 inline size-4 shrink-0 sm:mr-1.5" /> Profile
+              <span className="hidden sm:inline"> &amp; settings</span>
             </TabsTrigger>
           </TabsList>
         )}

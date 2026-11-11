@@ -29,7 +29,7 @@ import CountdownTimer from "@/components/CountdownTimer";
 import { apiGet, apiPost } from "@/lib/api";
 import { fmtDate, fmtDateTime, inr, mapsUrl, timeAgo } from "@/lib/format";
 import { useMe } from "@/lib/session";
-import type { Concert } from "@/lib/types";
+import type { Concert, PendingFeedback } from "@/lib/types";
 
 export default function ConcertDetails() {
   const { id } = useParams<{ id: string }>();
@@ -37,7 +37,7 @@ export default function ConcertDetails() {
   const qc = useQueryClient();
   const { data: me } = useMe();
   const [category, setCategory] = useState("");
-  const [rating, setRating] = useState("5");
+  const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
 
   const {
@@ -50,12 +50,25 @@ export default function ConcertDetails() {
     enabled: !!id,
   });
 
+  const { data: pendingFeedback = [] } = useQuery({
+    queryKey: ["pending-feedback"],
+    queryFn: () => apiGet<PendingFeedback[]>("/feedback/pending"),
+    enabled: me?.role === "customer",
+  });
+
+  const canReview = Boolean(
+    concert?.is_past && pendingFeedback.some((feedback) => feedback.concert_id === concert.id),
+  );
+
   const reviewMutation = useMutation({
-    mutationFn: () => apiPost(`/concerts/${id}/reviews`, { rating: Number(rating), comment }),
+    mutationFn: () => apiPost(`/concerts/${id}/reviews`, { rating, comment: comment.trim() }),
     onSuccess: () => {
-      toast.success("Review posted — thanks for sharing!");
+      toast.success("Thank you. Your concert feedback has been submitted.");
+      setRating(0);
       setComment("");
       qc.invalidateQueries({ queryKey: ["concert", id] });
+      qc.invalidateQueries({ queryKey: ["pending-feedback"] });
+      qc.invalidateQueries({ queryKey: ["admin-stats"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not post review"),
   });
@@ -274,56 +287,87 @@ export default function ConcertDetails() {
               ))}
             </div>
 
-            {me && !concert.is_past ? (
-              <div className="mt-5 rounded-2xl border border-white/10 bg-[#121524] p-4">
-                <h3 className="font-heading font-bold text-white">Write a review</h3>
-                <div className="mt-3 flex gap-3">
-                  <Select value={rating} onValueChange={(v: string) => setRating(v)}>
-                    <SelectTrigger
-                      className="w-24 border-white/10 bg-white/5 text-slate-200"
-                      data-testid="review-rating-select"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="border-white/10 bg-[#121524] text-slate-100">
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <SelectItem
-                          key={n}
-                          value={String(n)}
-                          className="data-[highlighted]:bg-violet-500/20"
-                        >
-                          {n} ★
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Textarea
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    placeholder="Share your experience (min 3 characters)…"
-                    className="border-white/10 bg-white/5 text-slate-100"
-                    data-testid="review-comment-input"
-                  />
+            {canReview && (
+              <div className="mt-6 overflow-hidden rounded-3xl border border-violet-400/25 bg-gradient-to-br from-violet-500/10 via-[#15182a] to-cyan-400/5 shadow-[0_24px_80px_rgba(76,29,149,0.16)]">
+                <div className="border-b border-white/10 px-5 py-5 sm:px-6">
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-cyan-300">
+                    Your experience matters
+                  </p>
+                  <h3 className="mt-2 font-heading text-xl font-bold text-white">
+                    How was this concert?
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Choose a rating and add a short comment to help future concertgoers.
+                  </p>
                 </div>
-                <Button
-                  size="sm"
-                  className="mt-3 bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
-                  disabled={comment.trim().length < 3 || reviewMutation.isPending}
-                  onClick={() => reviewMutation.mutate()}
-                  data-testid="review-submit-button"
-                >
-                  Post review
-                </Button>
+                <div className="space-y-5 p-5 sm:p-6">
+                  <fieldset>
+                    <legend className="mb-3 text-sm font-semibold text-slate-200">
+                      Concert rating
+                    </legend>
+                    <div className="flex flex-wrap gap-2" data-testid="review-rating-stars">
+                      {[1, 2, 3, 4, 5].map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-label={`${value} star${value > 1 ? "s" : ""}`}
+                          aria-pressed={rating === value}
+                          onClick={() => setRating(value)}
+                          className={`grid size-12 place-items-center rounded-2xl border transition ${
+                            value <= rating
+                              ? "border-amber-300/60 bg-amber-300/15 text-amber-300 shadow-[0_0_24px_rgba(252,211,77,0.12)]"
+                              : "border-white/10 bg-white/[0.04] text-slate-500 hover:border-amber-300/30 hover:text-amber-200"
+                          }`}
+                        >
+                          <Star className={`size-6 ${value <= rating ? "fill-current" : ""}`} />
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <div>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <label
+                        htmlFor="concert-review-comment"
+                        className="text-sm font-semibold text-slate-200"
+                      >
+                        Your comment
+                      </label>
+                      <span className="text-xs text-slate-500">{comment.length}/500</span>
+                    </div>
+                    <Textarea
+                      id="concert-review-comment"
+                      value={comment}
+                      maxLength={500}
+                      onChange={(event) => setComment(event.target.value)}
+                      placeholder="Tell us what you enjoyed and what could be improved."
+                      className="min-h-28 resize-none border-white/10 bg-[#0c1020] text-slate-100 placeholder:text-slate-600 focus-visible:ring-violet-400"
+                      data-testid="review-comment-input"
+                    />
+                    <p className="mt-2 text-xs text-slate-500">
+                      Please write at least 10 characters.
+                    </p>
+                  </div>
+                  <Button
+                    className="h-11 w-full bg-gradient-to-r from-violet-500 to-cyan-400 font-bold text-white shadow-[0_12px_30px_rgba(34,211,238,0.12)] sm:w-auto"
+                    disabled={
+                      rating === 0 || comment.trim().length < 10 || reviewMutation.isPending
+                    }
+                    onClick={() => reviewMutation.mutate()}
+                    data-testid="review-submit-button"
+                  >
+                    {reviewMutation.isPending ? "Submitting feedback?" : "Submit rating & comment"}
+                  </Button>
+                </div>
               </div>
-            ) : (
-              !me && (
-                <p className="mt-4 text-sm text-slate-400">
-                  <Link to="/login" className="text-cyan-300">
-                    Log in
-                  </Link>{" "}
-                  to write a review.
-                </p>
-              )
+            )}
+
+            {!me && concert.is_past && (
+              <p className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400">
+                <Link to="/login" className="font-semibold text-cyan-300">
+                  Log in
+                </Link>{" "}
+                to review a concert you attended.
+              </p>
             )}
           </section>
         </div>

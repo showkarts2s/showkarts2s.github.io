@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from datetime import timedelta
@@ -345,6 +346,144 @@ class APIRegressionTests(unittest.TestCase):
             headers={"Origin": "http://127.0.0.1:8002"},
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_completed_concert_feedback_is_required_once_and_reported_to_admin(self):
+        booking = self.hold(seats=["J2"])
+        paid = self.customer.post(f"/api/bookings/{booking['id']}/pay", json={"method": "upi"})
+        self.assertEqual(paid.status_code, 200, paid.text)
+
+        self.assertEqual(self.customer.get("/api/feedback/pending").json(), [])
+        too_early = self.customer.post(
+            "/api/concerts/c6/reviews",
+            json={"rating": 5, "comment": "The performance was excellent."},
+        )
+        self.assertEqual(too_early.status_code, 409, too_early.text)
+
+        with server.store() as state:
+            state["concerts"]["c6"]["date"] = (server.now() - timedelta(hours=4)).isoformat()
+
+        pending = self.customer.get("/api/feedback/pending")
+        self.assertEqual(pending.status_code, 200, pending.text)
+        self.assertEqual(len(pending.json()), 1)
+        self.assertEqual(pending.json()[0]["concert_id"], "c6")
+        self.assertEqual(pending.json()[0]["booking_ref"], booking["ref"])
+
+        not_an_attendee = self.other.post(
+            "/api/concerts/c6/reviews",
+            json={"rating": 4, "comment": "I enjoyed this concert very much."},
+        )
+        self.assertEqual(not_an_attendee.status_code, 403, not_an_attendee.text)
+        admin_review = self.admin.post(
+            "/api/concerts/c6/reviews",
+            json={"rating": 5, "comment": "Administrator feedback is not permitted."},
+        )
+        self.assertEqual(admin_review.status_code, 403, admin_review.text)
+        invalid = self.customer.post(
+            "/api/concerts/c6/reviews", json={"rating": 5, "comment": "short"}
+        )
+        self.assertEqual(invalid.status_code, 422, invalid.text)
+
+        comment = "The sound, lighting, and performance were excellent."
+        submitted = self.customer.post(
+            "/api/concerts/c6/reviews", json={"rating": 5, "comment": comment}
+        )
+        self.assertEqual(submitted.status_code, 200, submitted.text)
+        duplicate = self.customer.post(
+            "/api/concerts/c6/reviews", json={"rating": 4, "comment": comment}
+        )
+        self.assertEqual(duplicate.status_code, 409, duplicate.text)
+        self.assertEqual(self.customer.get("/api/feedback/pending").json(), [])
+
+        public_review = self.customer.get("/api/concerts/c6").json()["reviews"][0]
+        self.assertEqual(public_review["rating"], 5)
+        self.assertEqual(public_review["comment"], comment)
+        self.assertNotIn("user_id", public_review)
+
+        stats = self.admin.get("/api/admin/stats")
+        self.assertEqual(stats.status_code, 200, stats.text)
+        report = stats.json()
+        self.assertEqual(report["review_average"], 5)
+        self.assertEqual(report["review_count"], 1)
+        self.assertEqual(report["review_response_rate"], 100)
+        five_star = next(item for item in report["rating_distribution"] if item["rating"] == 5)
+        self.assertEqual(five_star["count"], 1)
+        self.assertEqual(report["recent_reviews"][0]["comment"], comment)
+
+    def test_completed_feedback_combination_matrix(self):
+        """Only one prompt per confirmed completed concert, across mixed booking states."""
+        booking = self.hold(seats=["J3"])
+        paid = self.customer.post(f"/api/bookings/{booking['id']}/pay", json={"method": "upi"})
+        self.assertEqual(paid.status_code, 200, paid.text)
+
+        with server.store() as state:
+            completed = server.now() - timedelta(hours=4)
+            for concert_id in ("c1", "c4", "c6"):
+                state["concerts"][concert_id]["date"] = completed.isoformat()
+
+            stored = state["bookings"][booking["id"]]
+            duplicate = deepcopy(stored)
+            duplicate.update(id="feedback-duplicate", ref="SK-FEEDBACK-DUPLICATE")
+            state["bookings"][duplicate["id"]] = duplicate
+
+            second = deepcopy(stored)
+            second.update(
+                id="feedback-second",
+                ref="SK-FEEDBACK-SECOND",
+                concert_id="c1",
+            )
+            state["bookings"][second["id"]] = second
+
+            for concert_id, status in (("c4", "cancelled"), ("c4", "failed")):
+                excluded = deepcopy(stored)
+                excluded.update(
+                    id=f"feedback-{status}",
+                    ref=f"SK-FEEDBACK-{status.upper()}",
+                    concert_id=concert_id,
+                    status=status,
+                )
+                state["bookings"][excluded["id"]] = excluded
+
+        pending = self.customer.get("/api/feedback/pending")
+        self.assertEqual(pending.status_code, 200, pending.text)
+        self.assertEqual(
+            {item["concert_id"] for item in pending.json()},
+            {"c1", "c6"},
+        )
+        self.assertEqual(len(pending.json()), 2)
+
+        other_review = self.other.post(
+            "/api/concerts/c6/reviews",
+            json={"rating": 5, "comment": "Another customer's excellent experience."},
+        )
+        self.assertEqual(other_review.status_code, 403, other_review.text)
+        self.assertEqual(len(self.customer.get("/api/feedback/pending").json()), 2)
+
+        whitespace_comment = "   A memorable concert with excellent sound and lighting.   "
+        first_review = self.customer.post(
+            "/api/concerts/c6/reviews",
+            json={"rating": 1, "comment": whitespace_comment},
+        )
+        self.assertEqual(first_review.status_code, 200, first_review.text)
+        remaining = self.customer.get("/api/feedback/pending").json()
+        self.assertEqual([item["concert_id"] for item in remaining], ["c1"])
+
+        stored_review = self.customer.get("/api/concerts/c6").json()["reviews"][0]
+        self.assertEqual(stored_review["rating"], 1)
+        self.assertEqual(stored_review["comment"], whitespace_comment.strip())
+
+        maximum_comment = "x" * 500
+        final_review = self.customer.post(
+            "/api/concerts/c1/reviews",
+            json={"rating": 5, "comment": maximum_comment},
+        )
+        self.assertEqual(final_review.status_code, 200, final_review.text)
+        self.assertEqual(self.customer.get("/api/feedback/pending").json(), [])
+
+        too_long = self.customer.post(
+            "/api/concerts/c4/reviews",
+            json={"rating": 5, "comment": "x" * 501},
+        )
+        self.assertEqual(too_long.status_code, 422, too_long.text)
 
     def test_stall_enquiry_is_validated_and_saved(self):
         payload = {

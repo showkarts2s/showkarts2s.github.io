@@ -12,6 +12,7 @@ import {
   Loader2,
   Mail,
   MapPinned,
+  MessageSquareText,
   Music2,
   Pencil,
   Plus,
@@ -19,6 +20,7 @@ import {
   Save,
   ShieldAlert,
   Sparkles,
+  Star,
   Store,
   Ticket,
   Trash2,
@@ -521,6 +523,116 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
+
+          <section className="overflow-hidden rounded-3xl border border-violet-400/20 bg-gradient-to-br from-violet-500/10 via-[#121524] to-cyan-400/5">
+            <div className="flex flex-col gap-3 border-b border-white/10 px-6 py-5 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.24em] text-cyan-300">
+                  Audience feedback
+                </p>
+                <h2 className="mt-2 font-heading text-2xl font-bold text-white">
+                  Concert ratings & comments
+                </h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Feedback from verified customers after their attended concerts.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-2 text-amber-200">
+                <Star className="size-5 fill-current" />
+                <span className="font-heading text-xl font-bold">
+                  {(stats?.review_average ?? 0).toFixed(1)}
+                </span>
+                <span className="text-sm text-amber-100/70">out of 5</span>
+              </div>
+            </div>
+
+            <div className="grid gap-6 p-6 lg:grid-cols-[0.8fr_1.2fr]">
+              <div className="space-y-5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-white/10 bg-black/15 p-4">
+                    <MessageSquareText className="size-5 text-violet-300" />
+                    <p className="mt-3 font-heading text-2xl font-bold text-white">
+                      {stats?.review_count ?? 0}
+                    </p>
+                    <p className="text-xs text-slate-400">reviews submitted</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-black/15 p-4">
+                    <p className="text-xs font-bold uppercase tracking-wider text-cyan-300">
+                      Response rate
+                    </p>
+                    <p className="mt-3 font-heading text-2xl font-bold text-white">
+                      {stats?.review_response_rate ?? 0}%
+                    </p>
+                    <p className="text-xs text-slate-400">eligible attendances rated</p>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-black/15 p-4">
+                  <p className="mb-4 text-sm font-semibold text-white">Rating distribution</p>
+                  <div className="space-y-3">
+                    {(stats?.rating_distribution ?? []).map((item) => (
+                      <div
+                        key={item.rating}
+                        className="grid grid-cols-[36px_1fr_34px] items-center gap-3 text-xs"
+                      >
+                        <span className="flex items-center gap-1 font-semibold text-amber-200">
+                          {item.rating}
+                          <Star className="size-3 fill-current" />
+                        </span>
+                        <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-amber-300 to-orange-400"
+                            style={{ width: `${item.percentage}%` }}
+                          />
+                        </div>
+                        <span className="text-right text-slate-500">{item.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="font-heading font-bold text-white">Recent comments</h3>
+                  <span className="text-xs text-slate-500">Newest first</span>
+                </div>
+                <div className="space-y-3" data-testid="admin-recent-reviews">
+                  {(stats?.recent_reviews ?? []).length === 0 && (
+                    <div className="grid min-h-56 place-items-center rounded-2xl border border-dashed border-white/10 bg-black/10 p-6 text-center">
+                      <div>
+                        <MessageSquareText className="mx-auto size-8 text-slate-600" />
+                        <p className="mt-3 font-semibold text-white">No concert feedback yet</p>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Customer ratings will appear here after completed concerts.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {(stats?.recent_reviews ?? []).map((review) => (
+                    <article
+                      key={review.id}
+                      className="rounded-2xl border border-white/10 bg-black/15 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-white">{review.user_name}</p>
+                          <p className="truncate text-xs text-cyan-200">{review.concert_title}</p>
+                        </div>
+                        <span className="flex shrink-0 items-center gap-1 rounded-full bg-amber-300/10 px-2.5 py-1 text-xs font-bold text-amber-200">
+                          {review.rating}
+                          <Star className="size-3 fill-current" />
+                        </span>
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-slate-300">{review.comment}</p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        Submitted {fmtDate(review.created_at)}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
 
           <div className="rounded-3xl border border-white/10 bg-[#121524] p-6">
             <h2 className="font-heading font-bold text-white">Upcoming events — fill rate</h2>

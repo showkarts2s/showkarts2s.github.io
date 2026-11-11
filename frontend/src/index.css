@@ -147,6 +147,22 @@ input.showkart-field:-webkit-autofill:focus {
   margin: 0;
 }
 
+/* Sonner's mobile defaults use a full viewport width plus side offsets, which can
+   make narrow pages horizontally scroll. Keep notifications inside the viewport. */
+@media (max-width: 600px) {
+  [data-sonner-toaster].toaster {
+    left: 0.75rem !important;
+    right: 0.75rem !important;
+    width: calc(100vw - 1.5rem) !important;
+  }
+
+  [data-sonner-toaster].toaster [data-sonner-toast] {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+  }
+}
+
 @media print {
   html,
   body,

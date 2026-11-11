@@ -781,3 +781,124 @@ test("visitor can browse stall categories and submit a stall enquiry", async ({ 
   await expect(enquiry).toContainText("Fresh snacks and cold beverages");
   await expect(enquiry).toContainText("2");
 });
+
+test("completed concert feedback blocks the customer until a valid review is submitted", async ({
+  page,
+}) => {
+  let submitted = false;
+  await page.route("**/api/feedback/pending", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        submitted
+          ? []
+          : [
+              {
+                concert_id: "c6",
+                title: "Coldplay: Music of the Spheres (India Leg)",
+                artist_name: "Coldplay",
+                poster_url: "/demo-media/image-4a01e2406abe.jpg",
+                venue_name: "DY Patil Stadium",
+                city: "Mumbai",
+                date: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+                booking_ref: "SK-FEEDBACK",
+              },
+            ],
+      ),
+    });
+  });
+  await page.route("**/api/concerts/c6/reviews", async (route) => {
+    const payload = route.request().postDataJSON() as { rating: number; comment: string };
+    expect(payload.rating).toBe(5);
+    expect(payload.comment.length).toBeGreaterThanOrEqual(10);
+    submitted = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ id: "r-e2e", ...payload }),
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  const dialog = page.getByTestId("post-concert-feedback-dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /close/i })).toHaveCount(0);
+  await expect(page.getByTestId("feedback-submit-button")).toBeDisabled();
+  await dialog.getByRole("radio", { name: "5 stars" }).click();
+  await page.getByTestId("feedback-comment-input").fill("Great sound, lighting, and performance.");
+  await expect(page.getByTestId("feedback-submit-button")).toBeEnabled();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBeTruthy();
+  const bounds = await dialog.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+
+  await page.getByTestId("feedback-submit-button").click();
+  await expect(dialog).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId("post-concert-feedback-dialog")).toHaveCount(0);
+});
+
+test("multiple completed concerts request feedback one at a time", async ({ page }) => {
+  const pending = [
+    {
+      concert_id: "c6",
+      title: "First completed concert",
+      artist_name: "First Artist",
+      poster_url: "/demo-media/image-4a01e2406abe.jpg",
+      venue_name: "First Arena",
+      city: "Mumbai",
+      date: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+      booking_ref: "SK-FIRST",
+    },
+    {
+      concert_id: "c5",
+      title: "Second completed concert",
+      artist_name: "Second Artist",
+      poster_url: "/demo-media/image-4a01e2406abe.jpg",
+      venue_name: "Second Arena",
+      city: "Bengaluru",
+      date: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
+      booking_ref: "SK-SECOND",
+    },
+  ];
+  await page.route("**/api/feedback/pending", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(pending),
+    });
+  });
+  await page.route(/\/api\/concerts\/(c5|c6)\/reviews$/, async (route) => {
+    const concertId = route
+      .request()
+      .url()
+      .match(/concerts\/(c5|c6)\/reviews/)?.[1];
+    const index = pending.findIndex((item) => item.concert_id === concertId);
+    expect(index).toBeGreaterThanOrEqual(0);
+    pending.splice(index, 1);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "Feedback submitted" }),
+    });
+  });
+
+  await login(page);
+  const dialog = page.getByTestId("post-concert-feedback-dialog");
+  await expect(dialog).toContainText("First completed concert");
+  await dialog.getByRole("radio", { name: "4 stars" }).click();
+  await page.getByTestId("feedback-comment-input").fill("The first concert was very enjoyable.");
+  await page.getByTestId("feedback-submit-button").click();
+
+  await expect(dialog).toContainText("Second completed concert");
+  await expect(page.getByTestId("feedback-submit-button")).toBeDisabled();
+  await dialog.getByRole("radio", { name: "5 stars" }).click();
+  await page.getByTestId("feedback-comment-input").fill("The second concert was also excellent.");
+  await page.getByTestId("feedback-submit-button").click();
+  await expect(dialog).toHaveCount(0);
+});

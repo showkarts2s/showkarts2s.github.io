@@ -47,6 +47,22 @@ export interface ConcertReview {
   created_at: string;
 }
 
+export interface PendingFeedback {
+  concert_id: string;
+  title: string;
+  artist_name: string;
+  poster_url: string;
+  venue_name: string;
+  city: string;
+  date: string;
+  booking_ref: string;
+}
+
+export interface AdminReview extends ConcertReview {
+  concert_id: string;
+  concert_title: string;
+}
+
 export interface Concert {
   id: string;
   title: string;
@@ -219,6 +235,11 @@ export interface AdminStats {
     sold: number;
     total: number;
   }[];
+  review_average: number | null;
+  review_count: number;
+  review_response_rate: number;
+  rating_distribution: { rating: number; count: number; percentage: number }[];
+  recent_reviews: AdminReview[];
 }
 
 export interface AdminBooking {

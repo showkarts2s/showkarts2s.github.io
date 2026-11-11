@@ -11,6 +11,7 @@ const PRIVATE_QUERY_ROOTS = new Set([
   "booking",
   "wishlist",
   "notifications",
+  "pending-feedback",
   "demo-cards",
   "admin-stats",
   "admin-concerts",

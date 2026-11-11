@@ -29,8 +29,11 @@ type State = {
 };
 const KEY = "showkart-pages-v1";
 const SESSION = `${KEY}-session`;
+const CONCERT_DURATION_MS = 3 * 60 * 60 * 1000;
 const stamp = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
+const concertHasEnded = (concert: { date: string }) =>
+  +new Date(concert.date) + CONCERT_DURATION_MS <= Date.now();
 function fail(message: string, status = 400): never {
   throw new ApiError(status, { detail: message });
 }
@@ -204,6 +207,13 @@ function concert(s: State, c: Concert): Concert {
     rating_avg: c.reviews?.length
       ? c.reviews.reduce((n, r) => n + r.rating, 0) / c.reviews.length
       : null,
+    reviews: (c.reviews || []).map(({ id, user_name, rating, comment, created_at }) => ({
+      id,
+      user_name,
+      rating,
+      comment,
+      created_at,
+    })),
   };
 }
 function artist(s: State, a: Artist): Artist {
@@ -444,6 +454,43 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
       return { message: "Password changed" };
     }
   }
+  if (p[0] === "feedback" && p[1] === "pending") {
+    const u = auth();
+    if (u.role !== "customer") return [];
+    const reviewed = new Set(
+      s.concerts.flatMap((item) =>
+        (item.reviews || [])
+          .filter((review) => (review as typeof review & { user_id?: string }).user_id === u.id)
+          .map(() => item.id),
+      ),
+    );
+    const eligible = new Map<string, Record<string, unknown>>();
+    s.bookings.forEach((booking) => {
+      if (
+        booking.user_id !== u.id ||
+        booking.status !== "confirmed" ||
+        reviewed.has(booking.concert_id)
+      )
+        return;
+      const raw = s.concerts.find((item) => item.id === booking.concert_id);
+      if (!raw || !concertHasEnded(raw)) return;
+      const item = concert(s, raw);
+      if (!eligible.has(item.id))
+        eligible.set(item.id, {
+          concert_id: item.id,
+          title: item.title,
+          artist_name: item.artist_name,
+          poster_url: item.poster_url,
+          venue_name: item.venue_name,
+          city: item.city,
+          date: item.date,
+          booking_ref: booking.ref,
+        });
+    });
+    return [...eligible.values()].sort(
+      (a, b) => +new Date(String(b.date)) - +new Date(String(a.date)),
+    );
+  }
   if (p[0] === "cards") {
     const user = cardManager();
     if (method === "GET" && !p[1])
@@ -563,16 +610,37 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
     }
     if (p[2] === "reviews") {
       const u = auth();
-      if (Number(b.rating) < 1 || Number(b.rating) > 5 || String(b.comment).trim().length < 3)
-        fail("Enter a rating and review");
-      (c.reviews ||= []).push({
+      if (u.role !== "customer") fail("Only customers can review a concert", 403);
+      if (!concertHasEnded(c)) fail("You can rate this concert after it has ended", 409);
+      if (
+        !s.bookings.some(
+          (booking) =>
+            booking.user_id === u.id &&
+            booking.concert_id === c.id &&
+            booking.status === "confirmed",
+        )
+      )
+        fail("Only customers with a confirmed ticket can rate this concert", 403);
+      if (
+        (c.reviews || []).some(
+          (review) => (review as typeof review & { user_id?: string }).user_id === u.id,
+        )
+      )
+        fail("You have already rated this concert", 409);
+      const comment = String(b.comment).trim();
+      if (Number(b.rating) < 1 || Number(b.rating) > 5) fail("Choose a rating from 1 to 5 stars");
+      if (comment.length < 10 || comment.length > 500)
+        fail("Please write between 10 and 500 characters about your experience");
+      const reviews = (c.reviews ||= []);
+      reviews.push({
         id: id(),
+        user_id: u.id,
         user_name: u.full_name,
         rating: b.rating,
-        comment: b.comment,
+        comment,
         created_at: stamp(),
-      });
-      return { message: "Review posted" };
+      } as (typeof reviews)[number]);
+      return { message: "Thank you. Your concert feedback has been submitted." };
     }
     return concert(s, c);
   }
@@ -773,6 +841,35 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
       paid.forEach((b) =>
         b.seats.forEach((x) => (category[x.category_name] = (category[x.category_name] || 0) + 1)),
       );
+      const reviews = s.concerts.flatMap((item) =>
+        (item.reviews || []).map((review) => ({
+          ...review,
+          user_id: (review as typeof review & { user_id?: string }).user_id,
+          concert_id: item.id,
+          concert_title: item.title,
+        })),
+      );
+      const eligiblePairs = new Set(
+        paid
+          .filter((booking) => {
+            const item = s.concerts.find((concert) => concert.id === booking.concert_id);
+            return item && concertHasEnded(item);
+          })
+          .map((booking) => `${booking.user_id}:${booking.concert_id}`),
+      );
+      const reviewedPairs = new Set(
+        reviews
+          .filter((review) => review.user_id)
+          .map((review) => `${review.user_id}:${review.concert_id}`),
+      );
+      const distribution = [5, 4, 3, 2, 1].map((rating) => {
+        const count = reviews.filter((review) => review.rating === rating).length;
+        return {
+          rating,
+          count,
+          percentage: reviews.length ? Math.round((count / reviews.length) * 100) : 0,
+        };
+      });
       return {
         revenue: paid.reduce((n, b) => n + b.total, 0),
         payments_count: paid.length,
@@ -798,6 +895,24 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
             sold: c.booked || 0,
             total: c.total_seats,
           })),
+        review_average: reviews.length
+          ? Math.round(
+              (reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length) * 10,
+            ) / 10
+          : null,
+        review_count: reviews.length,
+        review_response_rate: eligiblePairs.size
+          ? Math.round(
+              ([...reviewedPairs].filter((pair) => eligiblePairs.has(pair)).length /
+                eligiblePairs.size) *
+                100,
+            )
+          : 0,
+        rating_distribution: distribution,
+        recent_reviews: reviews
+          .toSorted((a, b) => +new Date(b.created_at) - +new Date(a.created_at))
+          .slice(0, 6)
+          .map(({ user_id: _userId, ...review }) => review),
       };
     }
     if (p[1] === "customers")

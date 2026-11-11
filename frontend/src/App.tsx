@@ -5,6 +5,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import Home from "@/pages/Home";
 import PageErrorBoundary from "@/components/PageErrorBoundary";
+import PostConcertFeedbackGate from "@/components/PostConcertFeedbackGate";
 
 const ExploreConcerts = lazy(() => import("@/pages/ExploreConcerts"));
 const Artists = lazy(() => import("@/pages/Artists"));
@@ -34,6 +35,7 @@ export default function App() {
   return (
     <div className="flex min-h-screen flex-col bg-[#090A10]">
       <Navbar />
+      <PostConcertFeedbackGate />
       <main className="flex-1">
         <PageErrorBoundary key={location.pathname}>
           <Suspense

@@ -36,6 +36,7 @@ ALLOWED_ORIGINS = {
 
 DEMO_CARD_EMAIL = "cards@showkart.in"
 DEMO_CARD_PASSWORD = "Cards@123"
+CONCERT_DURATION = timedelta(hours=3)
 
 
 DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=100)]
@@ -62,6 +63,11 @@ def now():
 
 def stamp():
     return now().isoformat()
+
+
+def concert_has_ended(concert):
+    """Concert records store a start time, so allow feedback after a three-hour show."""
+    return datetime.fromisoformat(concert["date"]) + CONCERT_DURATION <= now()
 
 
 def uid(prefix=""):
@@ -132,14 +138,18 @@ def seed() -> dict[str, Any]:
 
 
 @contextmanager
-def store():
+def store(*, writable: bool = True):
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(DB_PATH, timeout=20, check_same_thread=False)
     try:
         db.execute(
             "CREATE TABLE IF NOT EXISTS demo_state (id INTEGER PRIMARY KEY, data TEXT NOT NULL)"
         )
-        db.execute("BEGIN IMMEDIATE")
+        # Read-only page requests must not take SQLite's single writer lock. A page
+        # loads several resources concurrently; serialising all of those behind
+        # BEGIN IMMEDIATE made the last request wait for minutes under load.
+        if writable:
+            db.execute("BEGIN IMMEDIATE")
         row = db.execute("SELECT data FROM demo_state WHERE id=1").fetchone()
         s = json.loads(row[0]) if row else seed()
         # Older local databases predate stall enquiries. Keep them forward-compatible.
@@ -201,8 +211,9 @@ def store():
                 b["status"] = "failed"
                 b["hold_expires_at"] = None
         yield s
-        db.execute("INSERT OR REPLACE INTO demo_state(id,data) VALUES(1,?)", (json.dumps(s),))
-        db.commit()
+        if writable:
+            db.execute("INSERT OR REPLACE INTO demo_state(id,data) VALUES(1,?)", (json.dumps(s),))
+            db.commit()
     except Exception:
         db.rollback()
         raise
@@ -210,8 +221,10 @@ def store():
         db.close()
 
 
-def state_dep():
-    with store() as s:
+def state_dep(request: Request):
+    # GET/HEAD are snapshots. Mutating routes retain the transaction-wide writer
+    # lock so booking and seat operations remain atomic.
+    with store(writable=request.method not in {"GET", "HEAD"}) as s:
         yield s
 
 
@@ -316,6 +329,14 @@ def concert_view(s, c):
         s["artists"].get(c["artist_id"], {}).get("name", c.get("artist_name", "Artist"))
     )
     reviews = c.get("reviews", [])
+    result["reviews"] = [
+        {
+            key: review[key]
+            for key in ("id", "user_name", "rating", "comment", "created_at")
+            if key in review
+        }
+        for review in reviews
+    ]
     result["rating_avg"] = (
         round(sum(r["rating"] for r in reviews) / len(reviews), 1) if reviews else None
     )
@@ -649,22 +670,79 @@ def seat_map(concert_id: str, s=State):
 
 class Review(BaseModel):
     rating: int = Field(ge=1, le=5)
-    comment: str = Field(min_length=3, max_length=2000)
+    comment: str = Field(min_length=10, max_length=500)
+
+
+def pending_feedback_for(s, user_id):
+    reviewed = {
+        (review.get("user_id"), concert["id"])
+        for concert in s["concerts"].values()
+        for review in concert.get("reviews", [])
+    }
+    eligible = {}
+    for booking in s["bookings"].values():
+        if booking["user_id"] != user_id or booking["status"] != "confirmed":
+            continue
+        concert = s["concerts"].get(booking["concert_id"])
+        if not concert or not concert_has_ended(concert):
+            continue
+        if (user_id, concert["id"]) in reviewed:
+            continue
+        eligible.setdefault(
+            concert["id"],
+            dict(
+                concert_id=concert["id"],
+                title=concert["title"],
+                artist_name=concert_view(s, concert)["artist_name"],
+                poster_url=concert_view(s, concert)["poster_url"],
+                venue_name=concert["venue_name"],
+                city=concert["city"],
+                date=concert["date"],
+                booking_ref=booking["ref"],
+            ),
+        )
+    return sorted(eligible.values(), key=lambda item: item["date"], reverse=True)
+
+
+@app.get("/api/feedback/pending")
+def pending_feedback(request: Request, s=State):
+    user = current(request, s)
+    if user["role"] != "customer":
+        return []
+    return pending_feedback_for(s, user["id"])
 
 
 @app.post("/api/concerts/{concert_id}/reviews")
 def review(concert_id: str, body: Review, request: Request, s=State):
     u = current(request, s)
+    if u["role"] != "customer":
+        fail("Only customers can review a concert", 403)
     c = find(s, "concerts", concert_id)
+    if not concert_has_ended(c):
+        fail("You can rate this concert after it has ended", 409)
+    if not any(
+        booking["user_id"] == u["id"]
+        and booking["concert_id"] == concert_id
+        and booking["status"] == "confirmed"
+        for booking in s["bookings"].values()
+    ):
+        fail("Only customers with a confirmed ticket can rate this concert", 403)
+    if any(review.get("user_id") == u["id"] for review in c.get("reviews", [])):
+        fail("You have already rated this concert", 409)
+    comment = body.comment.strip()
+    if len(comment) < 10:
+        fail("Please write at least 10 characters about your experience")
     c.setdefault("reviews", []).append(
         dict(
             id=uid("r"),
+            user_id=u["id"],
             user_name=u["full_name"],
-            **body.model_dump(),
+            rating=body.rating,
+            comment=comment,
             created_at=stamp(),
         )
     )
-    return {"message": "Review posted"}
+    return {"message": "Thank you. Your concert feedback has been submitted."}
 
 
 @app.get("/api/artists")
@@ -1131,6 +1209,25 @@ def stats(request: Request, s=State):
     for b in paid:
         for x in b["seats"]:
             category[x["category_name"]] = category.get(x["category_name"], 0) + 1
+    reviews = [
+        {**review, "concert_id": concert["id"], "concert_title": concert["title"]}
+        for concert in s["concerts"].values()
+        for review in concert.get("reviews", [])
+    ]
+    distribution = {rating: 0 for rating in range(1, 6)}
+    for item in reviews:
+        distribution[item["rating"]] += 1
+    eligible_pairs = {
+        (booking["user_id"], booking["concert_id"])
+        for booking in paid
+        if booking["concert_id"] in s["concerts"]
+        and concert_has_ended(s["concerts"][booking["concert_id"]])
+    }
+    reviewed_pairs = {
+        (item.get("user_id"), item["concert_id"])
+        for item in reviews
+        if item.get("user_id")
+    }
     return dict(
         revenue=sum(b["total"] for b in paid),
         payments_count=len(paid),
@@ -1155,6 +1252,36 @@ def stats(request: Request, s=State):
             )
             for c in cs
             if not c["is_past"]
+        ],
+        review_average=round(sum(item["rating"] for item in reviews) / len(reviews), 1)
+        if reviews
+        else None,
+        review_count=len(reviews),
+        review_response_rate=round(100 * len(reviewed_pairs & eligible_pairs) / len(eligible_pairs))
+        if eligible_pairs
+        else 0,
+        rating_distribution=[
+            dict(
+                rating=rating,
+                count=distribution[rating],
+                percentage=round(100 * distribution[rating] / len(reviews)) if reviews else 0,
+            )
+            for rating in range(5, 0, -1)
+        ],
+        recent_reviews=[
+            {
+                key: item[key]
+                for key in (
+                    "id",
+                    "concert_id",
+                    "concert_title",
+                    "user_name",
+                    "rating",
+                    "comment",
+                    "created_at",
+                )
+            }
+            for item in sorted(reviews, key=lambda review: review["created_at"], reverse=True)[:6]
         ],
     )
 
