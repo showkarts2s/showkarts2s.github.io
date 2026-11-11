@@ -808,6 +808,18 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
           bookings_count: s.bookings.filter((b) => b.user_id === u.id).length,
           total_spent: paid.filter((b) => b.user_id === u.id).reduce((n, b) => n + b.total, 0),
         }));
+    if (p[1] === "enquiries") {
+      if (method === "GET") return s.enquiries.toReversed();
+      const enquiry = s.enquiries.find((item) => item.id === p[2] || item.reference === p[2]);
+      if (!enquiry) fail("Enquiry not found", 404);
+      if (p[3] === "status" && method === "PATCH") {
+        const status = String((input as { status?: string }).status || "");
+        if (!["received", "contacted", "approved", "closed"].includes(status))
+          fail("Choose a valid enquiry status");
+        enquiry.status = status;
+        return enquiry;
+      }
+    }
     if (p[1] === "bookings") {
       if (p[2]) return cancel(s, getBooking(p[2]));
       return s.bookings.toReversed().map((b) => ({

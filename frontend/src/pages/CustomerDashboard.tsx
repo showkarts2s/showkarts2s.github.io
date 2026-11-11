@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
@@ -27,13 +27,17 @@ import { apiGet, apiPost, apiPatch } from "@/lib/api";
 import { fmtDate, fmtDateTime, inr, initial } from "@/lib/format";
 import { useMe, useSession } from "@/lib/session";
 import type { Booking, User, WishlistItem } from "@/lib/types";
+import AdminWorkspaceNav from "@/components/admin/AdminWorkspaceNav";
 
 export default function CustomerDashboard() {
   const { data: me, isLoading: meLoading } = useMe();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const requestedTab = params.get("tab");
-  const tab = requestedTab === "wishlist" || requestedTab === "profile" ? requestedTab : "activity";
+  const tab =
+    requestedTab === "profile" || (requestedTab === "wishlist" && me?.role !== "admin")
+      ? requestedTab
+      : "activity";
   const setTab = (nextTab: string) => setParams({ tab: nextTab });
   const qc = useQueryClient();
 
@@ -72,6 +76,10 @@ export default function CustomerDashboard() {
     );
   }
 
+  if (me.role === "admin" && tab !== "profile") {
+    return <Navigate to="/admin" replace />;
+  }
+
   const now = new Date();
   const upcoming = bookings.filter((b) => b.status === "confirmed" && new Date(b.date) >= now);
   const pending = bookings.filter((b) => b.status === "pending");
@@ -84,6 +92,9 @@ export default function CustomerDashboard() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-16 pt-28 sm:px-6">
+      {me.role === "admin" && (
+        <AdminWorkspaceNav active="profile" className="mb-5 border-violet-400/20 bg-[#101421]/95" />
+      )}
       <section className="relative overflow-hidden rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-violet-500/15 via-[#111522] to-cyan-400/10 p-6 sm:p-8">
         <div className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-cyan-400/10 blur-3xl" />
         <div className="relative flex flex-wrap items-center justify-between gap-4">
@@ -101,71 +112,65 @@ export default function CustomerDashboard() {
               </p>
             </div>
           </div>
-          {me.role === "admin" && (
-            <Button
-              variant="outline"
-              className="border-amber-300/40 text-amber-200 hover:bg-amber-400/10"
-              onClick={() => navigate("/admin")}
-              data-testid="dashboard-admin-button"
-            >
-              Admin dashboard
-            </Button>
-          )}
         </div>
       </section>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-3">
-        {[
-          {
-            icon: Ticket,
-            label: "Active tickets",
-            value: upcoming.reduce((s, b) => s + b.seats.length, 0),
-          },
-          { icon: CalendarDays, label: "Upcoming shows", value: upcoming.length },
-          {
-            icon: Wallet,
-            label: "Lifetime spend",
-            value: inr(
-              bookings.filter((b) => b.status === "confirmed").reduce((s, b) => s + b.total, 0),
-            ),
-          },
-        ].map((s) => (
-          <div
-            key={s.label}
-            className="flex items-center gap-4 rounded-3xl border border-white/10 bg-gradient-to-br from-[#171b2c] to-[#0e1420] p-5 shadow-[0_16px_40px_rgba(0,0,0,0.18)]"
-          >
-            <span className="grid size-11 place-items-center rounded-xl bg-violet-500/15">
-              <s.icon className="size-5 text-violet-300" />
-            </span>
-            <div>
-              <p
-                className="font-heading text-xl font-bold text-white"
-                data-testid={`stat-${s.label.replace(/\s/g, "-").toLowerCase()}`}
-              >
-                {s.value}
-              </p>
-              <p className="text-xs text-slate-400">{s.label}</p>
+      {me.role !== "admin" && (
+        <div className="mt-5 grid gap-4 sm:grid-cols-3">
+          {[
+            {
+              icon: Ticket,
+              label: "Active tickets",
+              value: upcoming.reduce((s, b) => s + b.seats.length, 0),
+            },
+            { icon: CalendarDays, label: "Upcoming shows", value: upcoming.length },
+            {
+              icon: Wallet,
+              label: "Lifetime spend",
+              value: inr(
+                bookings.filter((b) => b.status === "confirmed").reduce((s, b) => s + b.total, 0),
+              ),
+            },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className="flex items-center gap-4 rounded-3xl border border-white/10 bg-gradient-to-br from-[#171b2c] to-[#0e1420] p-5 shadow-[0_16px_40px_rgba(0,0,0,0.18)]"
+            >
+              <span className="grid size-11 place-items-center rounded-xl bg-violet-500/15">
+                <s.icon className="size-5 text-violet-300" />
+              </span>
+              <div>
+                <p
+                  className="font-heading text-xl font-bold text-white"
+                  data-testid={`stat-${s.label.replace(/\s/g, "-").toLowerCase()}`}
+                >
+                  {s.value}
+                </p>
+                <p className="text-xs text-slate-400">{s.label}</p>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       <Tabs value={tab} onValueChange={setTab} className="mt-8">
-        <TabsList
-          className="h-auto w-full justify-start gap-1 rounded-2xl border border-white/10 bg-white/[0.04] p-1 sm:w-max"
-          data-testid="dashboard-tabs"
-          aria-label="Dashboard sections"
-        >
-          <TabsTrigger value="activity" data-testid="dashboard-activity-tab">
-            <Ticket className="mr-1.5 inline size-4" /> My activity
-          </TabsTrigger>
-          <TabsTrigger value="wishlist">
-            <Heart className="mr-1.5 inline size-4" /> Wishlist
-          </TabsTrigger>
-          <TabsTrigger value="profile">
-            <UserRound className="mr-1.5 inline size-4" /> Profile
-          </TabsTrigger>
-        </TabsList>
+        {me.role !== "admin" && (
+          <TabsList
+            className="h-auto w-full justify-start gap-1 rounded-2xl border border-white/10 bg-white/[0.04] p-1 sm:w-max"
+            data-testid="dashboard-tabs"
+            aria-label="Dashboard sections"
+          >
+            <TabsTrigger value="activity" data-testid="dashboard-activity-tab">
+              <Ticket className="mr-1.5 inline size-4" /> My activity
+            </TabsTrigger>
+            <TabsTrigger value="wishlist">
+              <Heart className="mr-1.5 inline size-4" /> Wishlist
+            </TabsTrigger>
+            <TabsTrigger value="profile" aria-label="Profile">
+              <UserRound className="mr-1.5 inline size-4" /> Profile &amp; settings
+            </TabsTrigger>
+          </TabsList>
+        )}
 
         {/* ACTIVITY: bookings, tickets and history in one place */}
         <TabsContent value="activity" className="mt-6 space-y-8">

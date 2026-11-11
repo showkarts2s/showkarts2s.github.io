@@ -248,3 +248,24 @@ export interface AdminCustomer {
   bookings_count: number;
   total_spent: number;
 }
+
+export type EnquiryStatus = "received" | "contacted" | "approved" | "closed";
+
+export interface AdminEnquiry {
+  id: string;
+  reference: string;
+  full_name: string;
+  business_name: string;
+  email: string;
+  phone: string;
+  event_name: string;
+  enquiry_type: "concert" | "stall" | "general";
+  stalls: number | null;
+  stall_category: string | null;
+  product_description: string | null;
+  power_required: boolean;
+  tables_required: number;
+  message: string;
+  status: EnquiryStatus;
+  created_at: string;
+}

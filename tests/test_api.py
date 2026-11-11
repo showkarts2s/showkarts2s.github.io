@@ -168,7 +168,7 @@ class APIRegressionTests(unittest.TestCase):
 
     def test_admin_routes_are_protected(self):
         anonymous = self.client()
-        for path in ["stats", "concerts", "bookings", "customers"]:
+        for path in ["stats", "concerts", "bookings", "customers", "enquiries"]:
             self.assertEqual(anonymous.get("/api/admin/" + path).status_code, 401)
             self.assertEqual(self.customer.get("/api/admin/" + path).status_code, 403)
         artist = {"name": "Forbidden artist", "genre": "College"}
@@ -368,6 +368,18 @@ class APIRegressionTests(unittest.TestCase):
             saved = state["enquiries"][-1]
             self.assertEqual(saved["email"], payload["email"])
             self.assertEqual(saved["stalls"], 2)
+
+        enquiries = self.admin.get("/api/admin/enquiries")
+        self.assertEqual(enquiries.status_code, 200, enquiries.text)
+        saved_enquiry = enquiries.json()[0]
+        self.assertEqual(saved_enquiry["reference"], response.json()["reference"])
+        self.assertEqual(saved_enquiry["business_name"], payload["business_name"])
+        updated = self.admin.patch(
+            f"/api/admin/enquiries/{saved_enquiry['id']}/status",
+            json={"status": "contacted"},
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json()["status"], "contacted")
 
         payload["stalls"] = 0
         invalid = self.customer.post("/api/enquiries", json=payload)

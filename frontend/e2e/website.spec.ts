@@ -111,6 +111,14 @@ for (const role of ["customer", "admin"] as const) {
   }) => {
     await login(page, role);
     await page.goto("/");
+    if (role === "admin") {
+      const adminAccount = page.getByTestId("navbar-admin-account");
+      await expect(adminAccount).toBeVisible();
+      await expect(adminAccount).toHaveAttribute("href", "/admin");
+      await adminAccount.click();
+      await expect(page).toHaveURL(/\/admin$/);
+      return;
+    }
     await page.getByTestId("navbar-user-menu").click();
     await expect(page.getByRole("menu")).toBeVisible();
     await expect(page.getByTestId("navbar-logout-button")).toHaveCount(0);
@@ -128,13 +136,20 @@ for (const role of ["customer", "admin"] as const) {
   test(`${role} has responsive account controls without menu logout`, async ({ page }) => {
     await login(page, role);
     await page.goto("/");
+    const accountControl = page.getByTestId(
+      role === "admin" ? "navbar-admin-account" : "navbar-user-menu",
+    );
     for (const width of [390, 768, 1024, 1280]) {
       await page.setViewportSize({ width, height: 844 });
-      await expect(page.getByTestId("navbar-user-menu")).toBeVisible();
+      await expect(accountControl).toBeVisible();
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
         `Header overflow at ${width}px`,
       ).toBeTruthy();
+    }
+    if (role === "admin") {
+      await expect(accountControl).toHaveAttribute("href", "/admin");
+      return;
     }
     await page.getByTestId("navbar-user-menu").click();
     await expect(page.getByTestId("navbar-logout-button")).toHaveCount(0);
@@ -578,6 +593,127 @@ test("admin edits preserve event time and administrator pages are guarded", asyn
   await expect(page.getByText("Browser Artist", { exact: true })).toBeVisible();
 });
 
+test("administrator workspace navigation stays available without customer activity", async ({
+  page,
+}) => {
+  await login(page, "admin");
+  await expect(page.getByTestId("admin-workspace-nav")).toBeVisible();
+  await expect(page.getByTestId("navbar-logo-link")).toHaveAttribute("href", "/admin");
+  const header = page.locator("header");
+  for (const label of ["Home", "Explore Concerts", "Stall Booking", "Artists", "About Us"]) {
+    await expect(header.getByRole("link", { name: label, exact: true })).toHaveCount(0);
+  }
+
+  await page.getByTestId("navbar-logo-link").click();
+  await expect(page).toHaveURL(/\/admin$/);
+
+  await expect(page.getByTestId("admin-workspace-activity")).toHaveCount(0);
+
+  await page.goto("/dashboard?tab=activity");
+  await expect(page).toHaveURL(/\/admin$/);
+
+  await page.getByTestId("admin-workspace-profile").click();
+  await expect(page).toHaveURL(/\/dashboard\?tab=profile$/);
+  await expect(page.getByTestId("admin-workspace-nav")).toBeVisible();
+  await expect(page.getByTestId("stat-active-tickets")).toHaveCount(0);
+  await expect(page.getByTestId("stat-upcoming-shows")).toHaveCount(0);
+  await expect(page.getByTestId("stat-lifetime-spend")).toHaveCount(0);
+
+  await page.getByTestId("admin-workspace-control").click();
+  await expect(page).toHaveURL(/\/admin$/);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByTestId("navbar-mobile-menu")).toHaveCount(0);
+});
+
+test("admin sections stay inside their tab bar and page on desktop and mobile", async ({
+  page,
+}) => {
+  await login(page, "admin");
+  const sectionNames = [
+    "Overview",
+    "Concerts",
+    "Artists",
+    "Bookings",
+    "Customers",
+    "Stall enquiries",
+  ];
+
+  for (const name of sectionNames) {
+    const tab = page.getByRole("tab", { name: new RegExp(`^${name}`) });
+    await tab.click();
+    const [listBox, tabBox] = await Promise.all([
+      page.getByTestId("admin-tabs").boundingBox(),
+      tab.boundingBox(),
+    ]);
+    expect(listBox).not.toBeNull();
+    expect(tabBox).not.toBeNull();
+    expect(tabBox!.y).toBeGreaterThanOrEqual(listBox!.y);
+    expect(tabBox!.y + tabBox!.height).toBeLessThanOrEqual(listBox!.y + listBox!.height + 1);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBeTruthy();
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
+  const overflowReport = await page.evaluate(() => ({
+    documentWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+    offenders: [...document.querySelectorAll<HTMLElement>("body *")]
+      .map((element) => ({
+        tag: element.tagName,
+        testId: element.dataset.testid,
+        className: typeof element.className === "string" ? element.className : "",
+        right: element.getBoundingClientRect().right,
+        width: element.getBoundingClientRect().width,
+      }))
+      .filter((element) => element.right > window.innerWidth + 1)
+      .slice(0, 10),
+  }));
+  expect(
+    overflowReport.documentWidth <= overflowReport.viewportWidth,
+    JSON.stringify(overflowReport, null, 2),
+  ).toBeTruthy();
+});
+
+test("admin creation dialogs remain readable without horizontal overflow", async ({ page }) => {
+  await login(page, "admin");
+
+  const assertDialogFits = async (testId: string) => {
+    const report = await page.getByTestId(testId).evaluate((dialog) => ({
+      clientWidth: dialog.clientWidth,
+      scrollWidth: dialog.scrollWidth,
+      left: dialog.getBoundingClientRect().left,
+      right: dialog.getBoundingClientRect().right,
+      viewportWidth: window.innerWidth,
+    }));
+    expect(report.scrollWidth, JSON.stringify(report)).toBeLessThanOrEqual(report.clientWidth + 1);
+    expect(report.left, JSON.stringify(report)).toBeGreaterThanOrEqual(0);
+    expect(report.right, JSON.stringify(report)).toBeLessThanOrEqual(report.viewportWidth + 1);
+  };
+
+  await page.getByTestId("admin-add-artist-button").click();
+  await assertDialogFits("admin-artist-dialog");
+  await expect(page.getByRole("heading", { name: "Artist information" })).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await page.getByTestId("admin-add-concert-button").click();
+  await assertDialogFits("admin-concert-dialog");
+  await expect(page.getByRole("heading", { name: "Prices and seat capacity" })).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByTestId("admin-add-artist-button").click();
+  await assertDialogFits("admin-artist-dialog");
+  await expect(page.getByTestId("admin-artist-name-input")).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await page.getByTestId("admin-add-concert-button").click();
+  await assertDialogFits("admin-concert-dialog");
+  await expect(page.getByTestId("admin-concert-title-input")).toBeVisible();
+});
+
 test("bad resource IDs show a useful state rather than a blank booking page", async ({ page }) => {
   await page.goto("/booking/no-such-event/seats");
   await expect(
@@ -635,4 +771,13 @@ test("visitor can browse stall categories and submit a stall enquiry", async ({ 
   await form.locator('input[type="checkbox"]').last().check();
   await page.getByTestId("enquiry-submit").click();
   await expect(page.getByTestId("enquiry-success")).toContainText(/Reference: ENQ-/);
+
+  await login(page, "admin");
+  await page.getByRole("tab", { name: /Stall enquiries/ }).click();
+  const enquiry = page.getByTestId(/admin-stall-enquiry-ENQ-/).filter({
+    hasText: "Campus Cafe Foods",
+  });
+  await expect(enquiry).toContainText("Campus Cafe Foods");
+  await expect(enquiry).toContainText("Fresh snacks and cold beverages");
+  await expect(enquiry).toContainText("2");
 });

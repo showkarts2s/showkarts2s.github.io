@@ -1054,6 +1054,35 @@ def create_enquiry(body: EnquiryInput, s=State):
     }
 
 
+class EnquiryStatusInput(BaseModel):
+    status: Literal["received", "contacted", "approved", "closed"]
+
+
+@app.get("/api/admin/enquiries")
+def admin_enquiries(request: Request, s=State):
+    current(request, s, admin=True)
+    return list(reversed(s["enquiries"]))
+
+
+@app.patch("/api/admin/enquiries/{enquiry_id}/status")
+def update_enquiry_status(
+    enquiry_id: str, body: EnquiryStatusInput, request: Request, s=State
+):
+    current(request, s, admin=True)
+    enquiry = next(
+        (
+            item
+            for item in s["enquiries"]
+            if item.get("id") == enquiry_id or item.get("reference") == enquiry_id
+        ),
+        None,
+    )
+    if not enquiry:
+        fail("Enquiry not found", 404)
+    enquiry["status"] = body.status
+    return enquiry
+
+
 @app.get("/api/admin/concerts")
 def admin_concerts(request: Request, s=State):
     current(request, s, admin=True)
