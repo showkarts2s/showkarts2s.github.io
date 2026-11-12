@@ -5,7 +5,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from copy import deepcopy
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -132,6 +132,7 @@ class APIRegressionTests(unittest.TestCase):
             venue_name="New auditorium",
             city="Pune",
             date=(server.now() + timedelta(days=50)).isoformat(),
+            end_date=(server.now() + timedelta(days=50, hours=4)).isoformat(),
         )
         response = self.admin.patch("/api/admin/concerts/c6", json=concert)
         self.assertEqual(response.status_code, 200, response.text)
@@ -154,6 +155,40 @@ class APIRegressionTests(unittest.TestCase):
         response = self.admin.patch("/api/admin/concerts/c6", json=concert)
         self.assertGreaterEqual(response.status_code, 400, response.text)
         self.assertLess(response.status_code, 500)
+
+    def test_concert_schedule_requires_future_start_and_later_end(self):
+        concert = self.admin.get("/api/concerts/c6").json()
+        concert["date"] = (server.now() - timedelta(days=1)).isoformat()
+        concert["end_date"] = (server.now() + timedelta(hours=1)).isoformat()
+        response = self.admin.post("/api/admin/concerts", json=concert)
+        self.assertEqual(response.status_code, 400, response.text)
+
+        concert["date"] = (server.now() + timedelta(days=10)).isoformat()
+        concert["end_date"] = (server.now() + timedelta(days=10) - timedelta(minutes=1)).isoformat()
+        response = self.admin.post("/api/admin/concerts", json=concert)
+        self.assertEqual(response.status_code, 409, response.text)
+
+        concert["end_date"] = (server.now() + timedelta(days=10, hours=3)).isoformat()
+        response = self.admin.post("/api/admin/concerts", json=concert)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertGreater(
+            datetime.fromisoformat(response.json()["end_date"]),
+            datetime.fromisoformat(response.json()["date"]),
+        )
+
+    def test_ongoing_concert_remains_in_public_listing_until_end_time(self):
+        with server.store() as state:
+            state["concerts"]["c6"]["date"] = (server.now() - timedelta(hours=1)).isoformat()
+            state["concerts"]["c6"]["end_date"] = (server.now() + timedelta(hours=2)).isoformat()
+
+        listing = self.customer.get("/api/concerts?sort=date")
+        self.assertEqual(listing.status_code, 200, listing.text)
+        self.assertIn("c6", {concert["id"] for concert in listing.json()})
+
+        with server.store() as state:
+            state["concerts"]["c6"]["end_date"] = (server.now() - timedelta(minutes=1)).isoformat()
+        listing = self.customer.get("/api/concerts?sort=date")
+        self.assertNotIn("c6", {concert["id"] for concert in listing.json()})
 
     def test_booking_ownership_for_read_pay_coupon_and_cancel(self):
         booking = self.hold()
@@ -361,6 +396,7 @@ class APIRegressionTests(unittest.TestCase):
 
         with server.store() as state:
             state["concerts"]["c6"]["date"] = (server.now() - timedelta(hours=4)).isoformat()
+            state["concerts"]["c6"]["end_date"] = (server.now() - timedelta(hours=1)).isoformat()
 
         pending = self.customer.get("/api/feedback/pending")
         self.assertEqual(pending.status_code, 200, pending.text)
@@ -442,6 +478,9 @@ class APIRegressionTests(unittest.TestCase):
             completed = server.now() - timedelta(hours=4)
             for concert_id in ("c1", "c4", "c6"):
                 state["concerts"][concert_id]["date"] = completed.isoformat()
+                state["concerts"][concert_id]["end_date"] = (
+                    completed + timedelta(hours=3)
+                ).isoformat()
 
             stored = state["bookings"][booking["id"]]
             duplicate = deepcopy(stored)

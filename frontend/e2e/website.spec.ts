@@ -304,6 +304,7 @@ test("admin can create an event, change inventory, and delete disposable records
   await page.getByTestId("admin-concert-venue-input").fill("College Auditorium");
   await page.getByTestId("admin-concert-city-input").fill("Pune");
   await page.getByTestId("admin-concert-date-input").fill("2099-06-10T18:30");
+  await page.getByTestId("admin-concert-end-date-input").fill("2099-06-10T22:30");
   await page.getByTestId("admin-concert-poster-input").fill("/demo-media/image-4a01e2406abe.jpg");
   await page.getByTestId("admin-concert-save-button").click();
   await expect(page.getByTestId("admin-concert-dialog")).toBeHidden();

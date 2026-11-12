@@ -32,8 +32,8 @@ const SESSION = `${KEY}-session`;
 const CONCERT_DURATION_MS = 3 * 60 * 60 * 1000;
 const stamp = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
-const concertHasEnded = (concert: { date: string }) =>
-  +new Date(concert.date) + CONCERT_DURATION_MS <= Date.now();
+const concertHasEnded = (concert: { date: string; end_date?: string }) =>
+  +new Date(concert.end_date || +new Date(concert.date) + CONCERT_DURATION_MS) <= Date.now();
 function fail(message: string, status = 400): never {
   throw new ApiError(status, { detail: message });
 }
@@ -66,6 +66,9 @@ async function load(): Promise<State> {
       }
       const legacyPrices = "499,999,1999,2999,4999";
       for (const savedConcert of state.concerts) {
+        savedConcert.end_date ||= new Date(
+          +new Date(savedConcert.date) + CONCERT_DURATION_MS,
+        ).toISOString();
         if (savedConcert.categories.map((category) => category.price).join(",") !== legacyPrices)
           continue;
         const seededConcert = concertsSeed.find((concert) => concert.id === savedConcert.id);
@@ -127,11 +130,18 @@ async function load(): Promise<State> {
   }
   return {
     users,
-    concerts: concertsSeed.map((c, i) => ({
-      ...c,
-      date: new Date(Date.now() + (7 + i * 3) * 86400000).toISOString(),
-      reviews: [],
-    })) as Concert[],
+    concerts: concertsSeed.map((c, i) => {
+      const date = new Date(Date.now() + (7 + i * 3) * 86400000).toISOString();
+      return {
+        ...c,
+        date,
+        end_date: new Date(+new Date(date) + CONCERT_DURATION_MS).toISOString(),
+        is_past: false,
+        is_ongoing: false,
+        is_ended: false,
+        reviews: [],
+      };
+    }) as Concert[],
     artists: artistsSeed as Artist[],
     bookings: [],
     wishlist: [],
@@ -195,6 +205,7 @@ function occupied(s: State, concertId: string) {
 function concert(s: State, c: Concert): Concert {
   return {
     ...c,
+    end_date: c.end_date || new Date(+new Date(c.date) + CONCERT_DURATION_MS).toISOString(),
     poster_url: image(c.poster_url),
     artist_name: s.artists.find((a) => a.id === c.artist_id)?.name || c.artist_name,
     total_seats: seats(c).length,
@@ -204,6 +215,8 @@ function concert(s: State, c: Concert): Concert {
       .reduce((n, b) => n + b.seats.length, 0),
     min_price: Math.min(...c.categories.map((x) => x.price)),
     is_past: +new Date(c.date) <= Date.now(),
+    is_ongoing: +new Date(c.date) <= Date.now() && +new Date(c.end_date) > Date.now(),
+    is_ended: +new Date(c.end_date) <= Date.now(),
     rating_avg: c.reviews?.length
       ? c.reviews.reduce((n, r) => n + r.rating, 0) / c.reviews.length
       : null,
@@ -327,6 +340,7 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
     concert_id: string;
     artist_id: string;
     date: string;
+    end_date: string;
     method: string;
     simulate_failure: boolean;
     item_type: "artist" | "concert";
@@ -566,7 +580,7 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
         .map((c) => concert(s, c))
         .filter(
           (c) =>
-            !c.is_past &&
+            +new Date(c.end_date) > Date.now() &&
             (!q.get("q") ||
               `${c.title} ${c.artist_name} ${c.city} ${c.venue_name}`
                 .toLowerCase()
@@ -1045,6 +1059,8 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
       if (method === "POST") {
         getArtist(b.artist_id);
         if (+new Date(b.date) <= Date.now()) fail("Schedule concerts in the future");
+        if (+new Date(b.end_date) <= +new Date(b.date))
+          fail("Concert ending time must be after its starting time", 409);
         const c = {
           ...b,
           id: id(),
@@ -1079,6 +1095,8 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
       } else {
         if (b.date !== c.date && +new Date(b.date) <= Date.now())
           fail("An event cannot be rescheduled into the past", 409);
+        if (+new Date(b.end_date) <= +new Date(b.date))
+          fail("Concert ending time must be after its starting time", 409);
         Object.assign(c, b);
         sync(s);
       }

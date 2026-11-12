@@ -39,6 +39,12 @@ export default function ConcertDetails() {
   const [category, setCategory] = useState("");
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const {
     data: concert,
@@ -56,8 +62,14 @@ export default function ConcertDetails() {
     enabled: me?.role === "customer",
   });
 
+  const hasStarted = Boolean(concert && +new Date(concert.date) <= currentTime);
+  const isOngoing = Boolean(
+    concert && +new Date(concert.date) <= currentTime && +new Date(concert.end_date) > currentTime,
+  );
+  const hasEnded = Boolean(concert && +new Date(concert.end_date) <= currentTime);
   const canReview = Boolean(
-    concert?.is_past &&
+    hasEnded &&
+    concert &&
     (concert.my_review || pendingFeedback.some((feedback) => feedback.concert_id === concert.id)),
   );
 
@@ -112,7 +124,7 @@ export default function ConcertDetails() {
 
   const soldOut = concert.available_count === 0;
   const goBook = () => {
-    if (concert.is_past || soldOut) return;
+    if (hasStarted || soldOut) return;
     const target = category
       ? `/booking/${concert.id}/seats?category=${category}`
       : `/booking/${concert.id}/seats`;
@@ -191,7 +203,7 @@ export default function ConcertDetails() {
                 </p>
               </div>
 
-              {!concert.is_past && !soldOut && (
+              {!hasStarted && !soldOut && (
                 <div className="mt-6 inline-flex flex-wrap items-center gap-4 rounded-2xl border border-violet-400/25 bg-violet-500/10 px-5 py-3.5">
                   <span className="text-xs uppercase tracking-[0.2em] text-cyan-300">
                     Doors open in
@@ -227,12 +239,18 @@ export default function ConcertDetails() {
                 <Button
                   size="lg"
                   onClick={goBook}
-                  disabled={soldOut || concert.is_past}
+                  disabled={soldOut || hasStarted}
                   className="bg-gradient-to-r from-violet-500 to-cyan-400 text-white shadow-[0_0_24px_rgba(139,92,246,0.5)] hover:opacity-90"
                   data-testid="concert-book-now-button"
                 >
                   <Ticket className="mr-2 size-5" />
-                  {concert.is_past ? "Show ended" : soldOut ? "Sold out" : "Book Now — pick seats"}
+                  {isOngoing
+                    ? "On stage now"
+                    : hasEnded
+                      ? "Show ended"
+                      : soldOut
+                        ? "Sold out"
+                        : "Book Now — pick seats"}
                 </Button>
                 <span className="text-sm text-slate-400">
                   {concert.available_count} of {concert.total_seats} seats available
@@ -382,7 +400,7 @@ export default function ConcertDetails() {
               </div>
             )}
 
-            {!me && concert.is_past && (
+            {!me && hasEnded && (
               <p className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400">
                 <Link to="/login" className="font-semibold text-cyan-300">
                   Log in

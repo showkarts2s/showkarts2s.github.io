@@ -81,7 +81,13 @@ export default function ConcertCard({ concert }: { concert: Concert }) {
             data-testid={`concert-book-${concert.id}`}
           >
             <Ticket className="size-4" />
-            {concert.is_past ? "Ended" : soldOut ? "Sold Out" : "Book Now"}
+            {concert.is_ongoing
+              ? "On Stage Now"
+              : concert.is_ended
+                ? "Ended"
+                : soldOut
+                  ? "Sold Out"
+                  : "Book Now"}
           </Button>
         </div>
       </div>

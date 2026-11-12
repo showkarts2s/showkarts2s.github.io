@@ -74,6 +74,7 @@ export interface Concert {
   description: string;
   poster_url: string;
   date: string;
+  end_date: string;
   genre: string;
   popularity: number;
   is_sample: boolean;
@@ -83,6 +84,8 @@ export interface Concert {
   booked?: number;
   available_count: number;
   is_past: boolean;
+  is_ongoing: boolean;
+  is_ended: boolean;
   reviews?: ConcertReview[];
   my_review?: ConcertReview | null;
   rating_avg?: number | null;

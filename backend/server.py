@@ -68,8 +68,14 @@ def stamp():
 
 
 def concert_has_ended(concert):
-    """Concert records store a start time, so allow feedback after a three-hour show."""
-    return datetime.fromisoformat(concert["date"]) + CONCERT_DURATION <= now()
+    return concert_end(concert) <= now()
+
+
+def concert_end(concert):
+    return datetime.fromisoformat(
+        concert.get("end_date")
+        or (datetime.fromisoformat(concert["date"]) + CONCERT_DURATION).isoformat()
+    )
 
 
 def uid(prefix=""):
@@ -105,6 +111,7 @@ def seed() -> dict[str, Any]:
             .replace(hour=13, minute=30, second=0, microsecond=0)
             .isoformat()
         )
+        c["end_date"] = (datetime.fromisoformat(c["date"]) + CONCERT_DURATION).isoformat()
         c["reviews"] = []
         c["is_sample"] = True
     users = {}
@@ -315,6 +322,9 @@ def occupied(s, concert_id, exclude=None):
 
 def concert_view(s, c):
     result = deepcopy(c)
+    result["end_date"] = concert_end(c).isoformat()
+    starts = datetime.fromisoformat(c["date"])
+    ends = concert_end(c)
     result["poster_url"] = MEDIA_MAP.get(c.get("poster_url"), c.get("poster_url", ""))
     seats = seats_for(c)
     result.update(
@@ -326,7 +336,9 @@ def concert_view(s, c):
             if b["concert_id"] == c["id"] and b["status"] == "confirmed"
         ),
         min_price=min((cat["price"] for cat in c["categories"]), default=0),
-        is_past=datetime.fromisoformat(c["date"]) <= now(),
+        is_past=starts <= now(),
+        is_ongoing=starts <= now() < ends,
+        is_ended=ends <= now(),
     )
     result["artist_name"] = (
         s["artists"].get(c["artist_id"], {}).get("name", c.get("artist_name", "Artist"))
@@ -617,7 +629,7 @@ def concerts(
     values = [
         c
         for c in values
-        if not c["is_past"]
+        if datetime.fromisoformat(c["end_date"]) > now()
         and (
             not q
             or q.lower()
@@ -1458,6 +1470,7 @@ class ConcertInput(BaseModel):
     address: str = ""
     description: str = ""
     date: datetime
+    end_date: datetime
     genre: str = ""
     poster_url: str = ""
     popularity: int = Field(default=50, ge=0, le=100)
@@ -1466,7 +1479,19 @@ class ConcertInput(BaseModel):
 def concert_values(body):
     d = body.model_dump(exclude_none=True)
     d["date"] = body.date.replace(tzinfo=body.date.tzinfo or timezone.utc).isoformat()
+    d["end_date"] = body.end_date.replace(tzinfo=body.end_date.tzinfo or timezone.utc).isoformat()
     return d
+
+
+def validate_concert_schedule(values, *, creating=False, original=None):
+    starts = datetime.fromisoformat(values["date"])
+    ends = datetime.fromisoformat(values["end_date"])
+    if creating and starts <= now():
+        fail("Schedule new concerts in the future")
+    if original and starts != datetime.fromisoformat(original["date"]) and starts <= now():
+        fail("An event cannot be rescheduled into the past", 409)
+    if ends <= starts:
+        fail("Concert ending time must be after its starting time", 409)
 
 
 @app.post("/api/admin/concerts")
@@ -1474,8 +1499,7 @@ def create_concert(body: ConcertInput, request: Request, s=State):
     current(request, s, admin=True)
     find(s, "artists", body.artist_id)
     values = concert_values(body)
-    if datetime.fromisoformat(values["date"]) <= now():
-        fail("Schedule new concerts in the future")
+    validate_concert_schedule(values, creating=True)
     categories = (
         deepcopy(next(iter(s["concerts"].values()))["categories"])
         if s["concerts"]
@@ -1499,11 +1523,7 @@ def edit_concert(concert_id: str, body: ConcertInput, request: Request, s=State)
     if body.artist_id:
         find(s, "artists", body.artist_id)
     values = concert_values(body)
-    if (
-        datetime.fromisoformat(values["date"]) != datetime.fromisoformat(c["date"])
-        and datetime.fromisoformat(values["date"]) <= now()
-    ):
-        fail("An event cannot be rescheduled into the past", 409)
+    validate_concert_schedule(values, original=c)
     c.update(values)
     sync_event_bookings(s, c)
     return concert_view(s, c)

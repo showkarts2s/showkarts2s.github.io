@@ -1,5 +1,5 @@
 import { assetUrl } from "@/lib/assets";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
@@ -33,6 +33,11 @@ const HERO_BG = assetUrl("/demo-media/image-9fd46dd2c605.jpg");
 const OFFER_BG = assetUrl("/demo-media/image-36c9961575ec.jpg");
 
 export default function Home() {
+  const [currentTime, setCurrentTime] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [city, setCity] = useState("");
@@ -52,14 +57,12 @@ export default function Home() {
   });
 
   const featured = concerts.slice(0, 6);
-  const now = Date.now();
-  const showDuration = 4 * 60 * 60 * 1000;
   const orderedConcerts = [...concerts].sort((a, b) => +new Date(a.date) - +new Date(b.date));
   const ongoing = orderedConcerts.filter((c) => {
     const starts = +new Date(c.date);
-    return starts <= now && starts + showDuration > now;
+    return starts <= currentTime && +new Date(c.end_date) > currentTime;
   });
-  const upcoming = orderedConcerts.filter((c) => +new Date(c.date) > now);
+  const upcoming = orderedConcerts.filter((c) => +new Date(c.date) > currentTime);
   const nextShow = ongoing[0] ?? upcoming[0];
   const trending = [...artists]
     .sort((a, b) => parseFloat(b.followers) - parseFloat(a.followers))
@@ -194,7 +197,8 @@ export default function Home() {
                 className="border-cyan-300/40 text-cyan-200 hover:bg-cyan-400/10"
                 onClick={() => navigate(`/concerts/${nextShow.id}`)}
               >
-                Grab tickets <ArrowRight className="ml-1 size-4" />
+                {ongoing.length ? "View live show" : "Grab tickets"}{" "}
+                <ArrowRight className="ml-1 size-4" />
               </Button>
             </motion.div>
           )}

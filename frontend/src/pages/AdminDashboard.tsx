@@ -91,6 +91,7 @@ const emptyConcert = {
   address: "",
   description: "",
   date: "",
+  end_date: "",
   genre: "",
   poster_url: "",
   popularity: 50,
@@ -203,6 +204,7 @@ export default function AdminDashboard() {
           ...concertForm,
           categories: undefined,
           date: new Date(concertForm.date).toISOString(),
+          end_date: new Date(concertForm.end_date).toISOString(),
         });
       } else {
         saved = await apiPatch<Concert>(`/admin/concerts/${(concertDialog as Concert).id}`, {
@@ -215,6 +217,9 @@ export default function AdminDashboard() {
           poster_url: concertForm.poster_url,
           popularity: concertForm.popularity,
           ...(concertForm.date ? { date: new Date(concertForm.date).toISOString() } : {}),
+          ...(concertForm.end_date
+            ? { end_date: new Date(concertForm.end_date).toISOString() }
+            : {}),
         });
       }
       return apiPatch<Concert>(
@@ -381,6 +386,7 @@ export default function AdminDashboard() {
         poster_url: c.poster_url,
         popularity: c.popularity,
         date: toLocalInput(c.date),
+        end_date: toLocalInput(c.end_date),
         categories: c.categories.map(({ key, name, color, price, quantity }) => ({
           key,
           name,
@@ -1617,15 +1623,42 @@ export default function AdminDashboard() {
                   className={inputCls}
                 />
               </Field>
-              <Field label="Date and time">
-                <Input
-                  type="datetime-local"
-                  value={concertForm.date}
-                  onChange={(event) => setConcertForm({ ...concertForm, date: event.target.value })}
-                  className={inputCls}
-                  data-testid="admin-concert-date-input"
-                />
-              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Starting date and time">
+                  <Input
+                    type="datetime-local"
+                    min={toLocalInput(new Date().toISOString())}
+                    value={concertForm.date}
+                    onChange={(event) => {
+                      const date = event.target.value;
+                      const currentEnd = +new Date(concertForm.end_date);
+                      const suggestedEnd = +new Date(date) + 3 * 60 * 60 * 1000;
+                      setConcertForm({
+                        ...concertForm,
+                        date,
+                        end_date:
+                          !concertForm.end_date || currentEnd <= +new Date(date)
+                            ? toLocalInput(new Date(suggestedEnd).toISOString())
+                            : concertForm.end_date,
+                      });
+                    }}
+                    className={inputCls}
+                    data-testid="admin-concert-date-input"
+                  />
+                </Field>
+                <Field label="Ending date and time">
+                  <Input
+                    type="datetime-local"
+                    min={concertForm.date || toLocalInput(new Date().toISOString())}
+                    value={concertForm.end_date}
+                    onChange={(event) =>
+                      setConcertForm({ ...concertForm, end_date: event.target.value })
+                    }
+                    className={inputCls}
+                    data-testid="admin-concert-end-date-input"
+                  />
+                </Field>
+              </div>
               <Field label="Poster image URL">
                 <Input
                   value={concertForm.poster_url}
@@ -1750,10 +1783,17 @@ export default function AdminDashboard() {
                 concertForm.title.trim().length < 3 ||
                 !concertForm.venue_name.trim() ||
                 !concertForm.city.trim() ||
+                !concertForm.date ||
+                !concertForm.end_date ||
+                (+new Date(concertForm.date) < Date.now() &&
+                  (concertDialog === "new" ||
+                    (concertDialog !== null &&
+                      toLocalInput(concertDialog.date) !== concertForm.date))) ||
+                +new Date(concertForm.end_date) <= +new Date(concertForm.date) ||
                 concertForm.categories.some(
                   (category) => category.price < 1 || category.quantity < 1,
                 ) ||
-                (concertDialog === "new" ? !concertForm.artist_id || !concertForm.date : false)
+                (concertDialog === "new" ? !concertForm.artist_id : false)
               }
               className="bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
               data-testid="admin-concert-save-button"
