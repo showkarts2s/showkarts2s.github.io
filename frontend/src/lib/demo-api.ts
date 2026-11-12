@@ -15,7 +15,7 @@ import type {
   DemoCard,
 } from "./types";
 
-type Account = User & { verifier: string };
+type Account = User & { verifier: string; enquiries_viewed_at?: string };
 type State = {
   users: Account[];
   concerts: Concert[];
@@ -621,16 +621,19 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
         )
       )
         fail("Only customers with a confirmed ticket can rate this concert", 403);
-      if (
-        (c.reviews || []).some(
-          (review) => (review as typeof review & { user_id?: string }).user_id === u.id,
-        )
-      )
-        fail("You have already rated this concert", 409);
+      const existing = (c.reviews || []).find(
+        (review) => (review as typeof review & { user_id?: string }).user_id === u.id,
+      );
       const comment = String(b.comment).trim();
       if (Number(b.rating) < 1 || Number(b.rating) > 5) fail("Choose a rating from 1 to 5 stars");
       if (comment.length < 10 || comment.length > 500)
         fail("Please write between 10 and 500 characters about your experience");
+      if (method === "PATCH") {
+        if (!existing) fail("Submit a review before updating it", 404);
+        Object.assign(existing, { rating: b.rating, comment, updated_at: stamp() });
+        return { message: "Your concert feedback has been updated." };
+      }
+      if (existing) fail("You have already rated this concert", 409);
       const reviews = (c.reviews ||= []);
       reviews.push({
         id: id(),
@@ -642,7 +645,22 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
       } as (typeof reviews)[number]);
       return { message: "Thank you. Your concert feedback has been submitted." };
     }
-    return concert(s, c);
+    const result = concert(s, c);
+    if (me?.role === "customer") {
+      const ownReview = (c.reviews || []).find(
+        (review) => (review as typeof review & { user_id?: string }).user_id === me.id,
+      );
+      result.my_review = ownReview
+        ? {
+            id: ownReview.id,
+            user_name: ownReview.user_name,
+            rating: ownReview.rating,
+            comment: ownReview.comment,
+            created_at: ownReview.created_at,
+          }
+        : null;
+    }
+    return result;
   }
   if (p[0] === "artists")
     return p[1] ? artist(s, getArtist(p[1])) : s.artists.map((a) => artist(s, a));
@@ -915,7 +933,54 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
           .map(({ user_id: _userId, ...review }) => review),
       };
     }
-    if (p[1] === "customers")
+    if (p[1] === "customers") {
+      const customer = p[2] ? s.users.find((user) => user.id === p[2]) : null;
+      if (method === "POST") {
+        const email = String(b.email).trim().toLowerCase();
+        if (String(b.full_name).trim().length < 2 || !/^\d{10}$/.test(String(b.mobile)))
+          fail("Enter a valid name and 10-digit mobile number");
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail("Enter a valid email address");
+        if (String(b.password).length < 8) fail("Enter a password of at least 8 characters");
+        if (s.users.some((user) => user.email === email))
+          fail("That email is already registered", 409);
+        const userId = id();
+        const created: Account = {
+          id: userId,
+          full_name: String(b.full_name).trim(),
+          email,
+          mobile: String(b.mobile),
+          role: "customer",
+          created_at: stamp(),
+          verifier: await verifier(String(b.password), userId),
+        };
+        s.users.push(created);
+        return { ...publicUser(created), bookings_count: 0, total_spent: 0 };
+      }
+      if (p[2]) {
+        if (!customer || customer.role !== "customer") fail("Customer not found", 404);
+        if (method === "DELETE") {
+          s.bookings = s.bookings.filter((item) => item.user_id !== customer.id);
+          s.wishlist = s.wishlist.filter((item) => item.user_id !== customer.id);
+          s.notifications = s.notifications.filter((item) => item.user_id !== customer.id);
+          s.concerts.forEach((item) => {
+            item.reviews = (item.reviews || []).filter(
+              (review) => (review as typeof review & { user_id?: string }).user_id !== customer.id,
+            );
+          });
+          s.users.splice(s.users.indexOf(customer), 1);
+          return { message: "Customer and related account data deleted" };
+        }
+        const email = String(b.email).trim().toLowerCase();
+        if (s.users.some((user) => user.email === email && user.id !== customer.id))
+          fail("That email is already registered", 409);
+        Object.assign(customer, {
+          full_name: String(b.full_name).trim(),
+          email,
+          mobile: String(b.mobile),
+        });
+        if (b.password) customer.verifier = await verifier(String(b.password), customer.id);
+        return publicUser(customer);
+      }
       return s.users
         .filter((u) => u.role === "customer")
         .map((u) => ({
@@ -923,7 +988,20 @@ async function route(s: State, method: string, path: string, input: unknown): Pr
           bookings_count: s.bookings.filter((b) => b.user_id === u.id).length,
           total_spent: paid.filter((b) => b.user_id === u.id).reduce((n, b) => n + b.total, 0),
         }));
+    }
     if (p[1] === "enquiries") {
+      if (p[2] === "unread-count") {
+        const viewed = me?.enquiries_viewed_at || "";
+        return {
+          count: s.enquiries.filter(
+            (item) => item.enquiry_type === "stall" && String(item.created_at) > viewed,
+          ).length,
+        };
+      }
+      if (p[2] === "mark-viewed") {
+        if (me) me.enquiries_viewed_at = stamp();
+        return { count: 0 };
+      }
       if (method === "GET") return s.enquiries.toReversed();
       const enquiry = s.enquiries.find((item) => item.id === p[2] || item.reference === p[2]);
       if (!enquiry) fail("Enquiry not found", 404);

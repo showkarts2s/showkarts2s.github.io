@@ -156,22 +156,29 @@ export default function CustomerDashboard() {
       <Tabs value={tab} onValueChange={setTab} className="mt-8">
         {me.role !== "admin" && (
           <TabsList
-            className="grid h-auto w-full grid-cols-3 gap-1 rounded-2xl border border-white/10 bg-white/[0.04] p-1 sm:flex sm:w-max sm:justify-start"
+            className="grid !h-12 w-full grid-cols-3 items-stretch gap-1 rounded-xl border border-white/10 bg-white/5 p-1 sm:!h-[72px] sm:gap-2 sm:rounded-2xl sm:p-2"
             data-testid="dashboard-tabs"
             aria-label="Dashboard sections"
           >
             <TabsTrigger
               value="activity"
-              className="min-w-0 px-2 sm:px-3"
+              className="!h-10 min-h-10 min-w-0 rounded-lg px-1.5 text-xs sm:!h-14 sm:min-h-14 sm:rounded-xl sm:px-3 sm:text-base"
               data-testid="dashboard-activity-tab"
             >
-              <Ticket className="mr-1 inline size-4 shrink-0 sm:mr-1.5" /> My activity
+              <Ticket className="mr-1.5 inline size-4 shrink-0" /> My activity
             </TabsTrigger>
-            <TabsTrigger value="wishlist" className="min-w-0 px-2 sm:px-3">
-              <Heart className="mr-1 inline size-4 shrink-0 sm:mr-1.5" /> Wishlist
+            <TabsTrigger
+              value="wishlist"
+              className="!h-10 min-h-10 min-w-0 rounded-lg px-1.5 text-xs sm:!h-14 sm:min-h-14 sm:rounded-xl sm:px-3 sm:text-base"
+            >
+              <Heart className="mr-1.5 inline size-4 shrink-0" /> Wishlist
             </TabsTrigger>
-            <TabsTrigger value="profile" className="min-w-0 px-2 sm:px-3" aria-label="Profile">
-              <UserRound className="mr-1 inline size-4 shrink-0 sm:mr-1.5" /> Profile
+            <TabsTrigger
+              value="profile"
+              className="!h-10 min-h-10 min-w-0 rounded-lg px-1.5 text-xs sm:!h-14 sm:min-h-14 sm:rounded-xl sm:px-3 sm:text-base"
+              aria-label="Profile"
+            >
+              <UserRound className="mr-1.5 inline size-4 shrink-0" /> Profile
               <span className="hidden sm:inline"> &amp; settings</span>
             </TabsTrigger>
           </TabsList>
@@ -250,22 +257,36 @@ export default function CustomerDashboard() {
                 {past.map((b) => {
                   const completed = b.status === "confirmed" && new Date(b.date) < now;
                   return (
-                    <div
-                      key={b.id}
-                      className={`flex items-center gap-4 rounded-2xl border border-white/10 bg-[#111522] p-4 ${completed ? "opacity-55 grayscale" : ""}`}
-                    >
-                      <img src={b.poster_url} alt="" className="size-14 rounded-xl object-cover" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold text-white">{b.concert_title}</p>
-                        <p className="mt-1 text-sm text-slate-400">
-                          {fmtDateTime(b.date)} ? {b.seats.length} ticket
-                          {b.seats.length !== 1 ? "s" : ""}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {b.ref} ? {inr(b.total)}
-                        </p>
+                    <div key={b.id} className="relative">
+                      {completed && (
+                        <Link
+                          to={`/concerts/${b.concert_id}#reviews`}
+                          className="absolute inset-0 z-10 rounded-2xl"
+                          aria-label={`View completed concert and ratings for ${b.concert_title}`}
+                          data-testid={`completed-concert-${b.concert_id}`}
+                        />
+                      )}
+                      <div
+                        className={`flex items-center gap-4 rounded-2xl border border-white/10 bg-[#111522] p-4 ${completed ? "transition hover:border-cyan-300/40 hover:bg-[#151a2a]" : ""}`}
+                      >
+                        <img
+                          src={b.poster_url}
+                          alt=""
+                          className="size-14 rounded-xl object-cover"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-semibold text-white">{b.concert_title}</p>
+                          <p className="mt-1 text-sm text-slate-400">
+                            {fmtDateTime(b.date)} ? {b.seats.length} ticket
+                            {b.seats.length !== 1 ? "s" : ""}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {b.ref} ? {inr(b.total)}
+                          </p>
+                        </div>
+                        <StatusBadge status={completed ? "completed" : b.status} />
+                        {completed && <ArrowUpRight className="size-4 text-cyan-300" />}
                       </div>
-                      <StatusBadge status={completed ? "completed" : b.status} />
                     </div>
                   );
                 })}

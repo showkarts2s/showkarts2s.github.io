@@ -2,9 +2,9 @@
 
 import tempfile
 import unittest
-from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
+from copy import deepcopy
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -399,15 +399,38 @@ class APIRegressionTests(unittest.TestCase):
         self.assertEqual(public_review["comment"], comment)
         self.assertNotIn("user_id", public_review)
 
+        customer_concert = self.customer.get("/api/concerts/c6").json()
+        self.assertEqual(customer_concert["my_review"]["id"], public_review["id"])
+        self.assertIsNone(self.other.get("/api/concerts/c6").json().get("my_review"))
+
+        updated_comment = "The show was good, and the updated sound mix was much clearer."
+        updated = self.customer.patch(
+            "/api/concerts/c6/reviews",
+            json={"rating": 4, "comment": updated_comment},
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(
+            self.customer.get("/api/concerts/c6").json()["my_review"]["comment"],
+            updated_comment,
+        )
+        self.assertEqual(
+            self.other.patch(
+                "/api/concerts/c6/reviews",
+                json={"rating": 1, "comment": "I must not edit another user's review."},
+            ).status_code,
+            404,
+        )
+        self.assertEqual(self.customer.delete("/api/concerts/c6/reviews").status_code, 405)
+
         stats = self.admin.get("/api/admin/stats")
         self.assertEqual(stats.status_code, 200, stats.text)
         report = stats.json()
-        self.assertEqual(report["review_average"], 5)
+        self.assertEqual(report["review_average"], 4)
         self.assertEqual(report["review_count"], 1)
         self.assertEqual(report["review_response_rate"], 100)
-        five_star = next(item for item in report["rating_distribution"] if item["rating"] == 5)
-        self.assertEqual(five_star["count"], 1)
-        self.assertEqual(report["recent_reviews"][0]["comment"], comment)
+        four_star = next(item for item in report["rating_distribution"] if item["rating"] == 4)
+        self.assertEqual(four_star["count"], 1)
+        self.assertEqual(report["recent_reviews"][0]["comment"], updated_comment)
 
     def test_completed_feedback_combination_matrix(self):
         """Only one prompt per confirmed completed concert, across mixed booking states."""
@@ -523,6 +546,58 @@ class APIRegressionTests(unittest.TestCase):
         payload["stalls"] = 0
         invalid = self.customer.post("/api/enquiries", json=payload)
         self.assertEqual(invalid.status_code, 422)
+
+    def test_admin_manages_customers_and_persists_stall_view_state(self):
+        created = self.admin.post(
+            "/api/admin/customers",
+            json={
+                "full_name": "Managed Customer",
+                "email": "managed@example.com",
+                "mobile": "9876543210",
+                "password": "Managed@123",
+            },
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        customer_id = created.json()["id"]
+        updated = self.admin.patch(
+            f"/api/admin/customers/{customer_id}",
+            json={
+                "full_name": "Updated Customer",
+                "email": "updated@example.com",
+                "mobile": "9876543211",
+            },
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json()["full_name"], "Updated Customer")
+        self.assertEqual(self.admin.delete(f"/api/admin/customers/{customer_id}").status_code, 200)
+        self.assertNotIn(
+            customer_id, [item["id"] for item in self.admin.get("/api/admin/customers").json()]
+        )
+
+        before = self.admin.get("/api/admin/enquiries/unread-count").json()["count"]
+        enquiry = self.customer.post(
+            "/api/enquiries",
+            json={
+                "full_name": "Stall Owner",
+                "business_name": "Fresh Foods",
+                "email": "stall@example.com",
+                "phone": "9876543210",
+                "event_name": "Campus Concert",
+                "enquiry_type": "stall",
+                "stalls": 1,
+                "stall_category": "Food",
+                "product_description": "Fresh food and beverages",
+                "power_required": True,
+                "tables_required": 1,
+                "message": "Please reserve one stall for our business.",
+            },
+        )
+        self.assertEqual(enquiry.status_code, 201, enquiry.text)
+        self.assertEqual(
+            self.admin.get("/api/admin/enquiries/unread-count").json()["count"], before + 1
+        )
+        self.assertEqual(self.admin.post("/api/admin/enquiries/mark-viewed").json()["count"], 0)
+        self.assertEqual(self.admin.get("/api/admin/enquiries/unread-count").json()["count"], 0)
 
 
 if __name__ == "__main__":

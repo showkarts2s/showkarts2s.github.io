@@ -41,11 +41,15 @@ def main() -> None:
     with sqlite3.connect(args.db) as connection:
         row = connection.execute("SELECT data FROM demo_state WHERE id = 1").fetchone()
     if not row:
-        raise SystemExit("ShowKart state has not been created yet. Start the backend once and retry.")
+        raise SystemExit(
+            "ShowKart state has not been created yet. Start the backend once and retry."
+        )
 
     state = json.loads(row[0])
     users = state.get("users", {})
-    sessions = [session for session in state.get("sessions", {}).values() if active(session["expires"])]
+    sessions = [
+        session for session in state.get("sessions", {}).values() if active(session["expires"])
+    ]
 
     registered = Counter(user.get("role", "unknown") for user in users.values())
     session_counts: Counter[str] = Counter()

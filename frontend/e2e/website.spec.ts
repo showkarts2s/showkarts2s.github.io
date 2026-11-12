@@ -106,7 +106,7 @@ async function hold(page: Page, seat: string) {
 }
 
 for (const role of ["customer", "admin"] as const) {
-  test(`${role} account menu links to profile and logout is only available there`, async ({
+  test(`${role} account control links to its workspace and logout stays in profile`, async ({
     page,
   }) => {
     await login(page, role);
@@ -119,11 +119,10 @@ for (const role of ["customer", "admin"] as const) {
       await expect(page).toHaveURL(/\/admin$/);
       return;
     }
-    await page.getByTestId("navbar-user-menu").click();
-    await expect(page.getByRole("menu")).toBeVisible();
-    await expect(page.getByTestId("navbar-logout-button")).toHaveCount(0);
-    await expect(page.getByRole("menuitem", { name: "My Dashboard" })).toHaveCount(0);
-    await page.getByTestId("navbar-profile-link").click();
+    const customerAccount = page.getByTestId("navbar-user-account");
+    await expect(customerAccount).toHaveAttribute("href", "/dashboard?tab=activity");
+    await customerAccount.click();
+    await page.getByRole("tab", { name: "Profile" }).click();
     await expect(page).toHaveURL(/\/dashboard\?tab=profile$/);
     await expect(page.getByTestId("profile-logout-button")).toBeVisible();
     await page.getByTestId("profile-logout-button").click();
@@ -137,7 +136,7 @@ for (const role of ["customer", "admin"] as const) {
     await login(page, role);
     await page.goto("/");
     const accountControl = page.getByTestId(
-      role === "admin" ? "navbar-admin-account" : "navbar-user-menu",
+      role === "admin" ? "navbar-admin-account" : "navbar-user-account",
     );
     for (const width of [390, 768, 1024, 1280]) {
       await page.setViewportSize({ width, height: 844 });
@@ -151,9 +150,8 @@ for (const role of ["customer", "admin"] as const) {
       await expect(accountControl).toHaveAttribute("href", "/admin");
       return;
     }
-    await page.getByTestId("navbar-user-menu").click();
-    await expect(page.getByTestId("navbar-logout-button")).toHaveCount(0);
-    await page.getByTestId("navbar-profile-link").click();
+    await accountControl.click();
+    await page.getByRole("tab", { name: "Profile" }).click();
     await page.getByTestId("profile-logout-button").click();
     await expect(page.getByTestId("navbar-login-button")).toBeVisible();
     expect(await (await page.request.get("/api/auth/me")).json()).toBeNull();
@@ -174,7 +172,7 @@ test("failed profile logout shows an error without pretending the session ended"
   );
   await page.getByTestId("profile-logout-button").click();
   await expect(page.getByText("Sign-out temporarily unavailable", { exact: true })).toBeVisible();
-  await expect(page.getByTestId("navbar-user-menu")).toBeVisible();
+  await expect(page.getByTestId("navbar-user-account")).toBeVisible();
   expect(await (await page.request.get("/api/auth/me")).json()).not.toBeNull();
   await page.unroute("**/api/auth/logout");
   await page.getByTestId("profile-logout-button").click();

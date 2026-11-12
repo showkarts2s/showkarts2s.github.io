@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -26,7 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import CountdownTimer from "@/components/CountdownTimer";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import { fmtDate, fmtDateTime, inr, mapsUrl, timeAgo } from "@/lib/format";
 import { useMe } from "@/lib/session";
 import type { Concert, PendingFeedback } from "@/lib/types";
@@ -57,15 +57,32 @@ export default function ConcertDetails() {
   });
 
   const canReview = Boolean(
-    concert?.is_past && pendingFeedback.some((feedback) => feedback.concert_id === concert.id),
+    concert?.is_past &&
+    (concert.my_review || pendingFeedback.some((feedback) => feedback.concert_id === concert.id)),
   );
 
+  useEffect(() => {
+    if (!concert?.my_review) return;
+    setRating(concert.my_review.rating);
+    setComment(concert.my_review.comment);
+  }, [concert?.my_review]);
+
+  useEffect(() => {
+    if (!concert || window.location.hash !== "#reviews") return;
+    requestAnimationFrame(() => document.getElementById("reviews")?.scrollIntoView());
+  }, [concert]);
+
   const reviewMutation = useMutation({
-    mutationFn: () => apiPost(`/concerts/${id}/reviews`, { rating, comment: comment.trim() }),
+    mutationFn: () =>
+      concert?.my_review
+        ? apiPatch(`/concerts/${id}/reviews`, { rating, comment: comment.trim() })
+        : apiPost(`/concerts/${id}/reviews`, { rating, comment: comment.trim() }),
     onSuccess: () => {
-      toast.success("Thank you. Your concert feedback has been submitted.");
-      setRating(0);
-      setComment("");
+      toast.success(
+        concert?.my_review
+          ? "Your concert feedback has been updated."
+          : "Thank you. Your concert feedback has been submitted.",
+      );
       qc.invalidateQueries({ queryKey: ["concert", id] });
       qc.invalidateQueries({ queryKey: ["pending-feedback"] });
       qc.invalidateQueries({ queryKey: ["admin-stats"] });
@@ -263,7 +280,7 @@ export default function ConcertDetails() {
             </div>
           </section>
 
-          <section>
+          <section id="reviews">
             <h2 className="font-heading text-2xl font-bold text-white">Reviews & ratings</h2>
             <div className="mt-4 space-y-3" data-testid="concert-reviews-list">
               {(concert.reviews ?? []).length === 0 && (
@@ -294,7 +311,7 @@ export default function ConcertDetails() {
                     Your experience matters
                   </p>
                   <h3 className="mt-2 font-heading text-xl font-bold text-white">
-                    How was this concert?
+                    {concert.my_review ? "Update your rating and comment" : "How was this concert?"}
                   </h3>
                   <p className="mt-1 text-sm text-slate-400">
                     Choose a rating and add a short comment to help future concertgoers.
@@ -355,7 +372,11 @@ export default function ConcertDetails() {
                     onClick={() => reviewMutation.mutate()}
                     data-testid="review-submit-button"
                   >
-                    {reviewMutation.isPending ? "Submitting feedback?" : "Submit rating & comment"}
+                    {reviewMutation.isPending
+                      ? "Saving feedback..."
+                      : concert.my_review
+                        ? "Update rating & comment"
+                        : "Submit rating & comment"}
                   </Button>
                 </div>
               </div>

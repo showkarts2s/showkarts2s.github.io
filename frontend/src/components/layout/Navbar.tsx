@@ -4,8 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   Menu,
-  ChevronDown,
-  Ticket,
   User as UserIcon,
   ShieldCheck,
   UserPlus,
@@ -15,7 +13,6 @@ import {
   Mic2,
   Info,
   ArrowRight,
-  WalletCards,
   Bell,
   CheckCheck,
 } from "lucide-react";
@@ -24,10 +21,6 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useMe } from "@/lib/session";
@@ -110,55 +103,19 @@ export default function Navbar() {
               <ShieldCheck className="size-4 text-amber-300" />
             </Link>
           ) : me ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                className="inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-violet-500/10 px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
-                data-testid="navbar-user-menu"
-                aria-label={`Open account menu for ${me.full_name}`}
-              >
-                <span className="grid size-7 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 text-xs font-bold text-white">
-                  {initial(me.full_name)}
-                </span>
-                <span className="hidden max-w-28 truncate text-sm text-slate-200 sm:inline">
-                  {me.full_name}
-                </span>
-                <ChevronDown className="size-3.5 text-slate-400" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52 border-white/10 bg-[#121524]">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel className="text-slate-300">{me.email}</DropdownMenuLabel>
-                  <DropdownMenuSeparator className="bg-white/10" />
-                  {me.role === "card_manager" ? (
-                    <>
-                      <DropdownMenuItem
-                        onClick={() => navigate("/cards")}
-                        data-testid="navbar-card-studio-link"
-                      >
-                        <WalletCards className="size-4" /> Card Studio
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => navigate("/cards?tab=profile")}>
-                        <UserIcon className="size-4" /> Profile & settings
-                      </DropdownMenuItem>
-                    </>
-                  ) : (
-                    <>
-                      <DropdownMenuItem
-                        onClick={() => navigate("/dashboard?tab=activity")}
-                        data-testid="navbar-tickets-link"
-                      >
-                        <Ticket className="size-4" /> My activity
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => navigate("/dashboard?tab=profile")}
-                        data-testid="navbar-profile-link"
-                      >
-                        <UserIcon className="size-4" /> Profile & settings
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Link
+              to={me.role === "card_manager" ? "/cards" : "/dashboard?tab=activity"}
+              className="inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-violet-500/10 px-2 py-1.5 outline-none transition hover:border-violet-300/60 hover:bg-violet-500/15 focus-visible:ring-2 focus-visible:ring-violet-400"
+              data-testid="navbar-user-account"
+              aria-label={`Open account for ${me.full_name}`}
+            >
+              <span className="grid size-7 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 text-xs font-bold text-white">
+                {initial(me.full_name)}
+              </span>
+              <span className="hidden max-w-28 truncate text-sm text-slate-200 sm:inline">
+                {me.full_name}
+              </span>
+            </Link>
           ) : (
             <div className="hidden items-center gap-2 md:flex">
               <Button

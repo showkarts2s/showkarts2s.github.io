@@ -84,6 +84,7 @@ export interface Concert {
   available_count: number;
   is_past: boolean;
   reviews?: ConcertReview[];
+  my_review?: ConcertReview | null;
   rating_avg?: number | null;
 }
 

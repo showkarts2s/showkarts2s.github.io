@@ -19,7 +19,6 @@ import {
   Receipt,
   Save,
   ShieldAlert,
-  Sparkles,
   Star,
   Store,
   Ticket,
@@ -31,6 +30,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -102,6 +102,7 @@ const emptyConcert = {
     { key: "vip", name: "VIP – Backstage Lounge", color: "#F43F5E", price: 6999, quantity: 10 },
   ],
 };
+const emptyCustomer = { full_name: "", email: "", mobile: "", password: "" };
 
 export default function AdminDashboard() {
   const { data: me, isLoading } = useMe();
@@ -110,6 +111,9 @@ export default function AdminDashboard() {
   const [concertDialog, setConcertDialog] = useState<null | "new" | Concert>(null);
   const [artistForm, setArtistForm] = useState(emptyArtist);
   const [concertForm, setConcertForm] = useState(emptyConcert);
+  const [adminTab, setAdminTab] = useState("overview");
+  const [customerDialog, setCustomerDialog] = useState<null | "new" | AdminCustomer>(null);
+  const [customerForm, setCustomerForm] = useState(emptyCustomer);
 
   const { data: stats } = useQuery({
     queryKey: ["admin-stats"],
@@ -139,6 +143,11 @@ export default function AdminDashboard() {
   const { data: enquiries = [] } = useQuery({
     queryKey: ["admin-enquiries"],
     queryFn: () => apiGet<AdminEnquiry[]>("/admin/enquiries"),
+    enabled: me?.role === "admin",
+  });
+  const { data: unreadEnquiries = { count: 0 } } = useQuery({
+    queryKey: ["admin-enquiries-unread"],
+    queryFn: () => apiGet<{ count: number }>("/admin/enquiries/unread-count"),
     enabled: me?.role === "admin",
   });
 
@@ -251,6 +260,47 @@ export default function AdminDashboard() {
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Update failed"),
   });
+
+  const markEnquiriesViewed = useMutation({
+    mutationFn: () => apiPost<{ count: number }>("/admin/enquiries/mark-viewed"),
+    onSuccess: () => qc.setQueryData(["admin-enquiries-unread"], { count: 0 }),
+  });
+
+  const saveCustomer = useMutation({
+    mutationFn: () =>
+      customerDialog === "new"
+        ? apiPost("/admin/customers", customerForm)
+        : apiPatch(`/admin/customers/${(customerDialog as AdminCustomer).id}`, customerForm),
+    onSuccess: () => {
+      toast.success(customerDialog === "new" ? "Customer added" : "Customer updated");
+      setCustomerDialog(null);
+      invalidate(["admin-customers", "admin-stats"]);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Customer save failed"),
+  });
+
+  const deleteCustomer = useMutation({
+    mutationFn: (id: string) => apiDelete(`/admin/customers/${id}`),
+    onSuccess: () => {
+      toast.success("Customer deleted");
+      invalidate(["admin-customers", "admin-bookings", "admin-stats"]);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Customer delete failed"),
+  });
+
+  const openCustomerDialog = (customer: "new" | AdminCustomer) => {
+    setCustomerDialog(customer);
+    setCustomerForm(
+      customer === "new"
+        ? emptyCustomer
+        : {
+            full_name: customer.full_name,
+            email: customer.email,
+            mobile: customer.mobile,
+            password: "",
+          },
+    );
+  };
 
   const saveCategory = useMutation({
     mutationFn: ({
@@ -383,7 +433,14 @@ export default function AdminDashboard() {
         <AdminWorkspaceNav active="control" className="relative mt-6" />
       </section>
 
-      <Tabs defaultValue="overview" className="mt-8 min-w-0 max-w-full gap-0">
+      <Tabs
+        value={adminTab}
+        onValueChange={(value) => {
+          setAdminTab(value);
+          if (value === "stalls" && unreadEnquiries.count > 0) markEnquiriesViewed.mutate();
+        }}
+        className="mt-8 min-w-0 max-w-full gap-0"
+      >
         <TabsList
           className="grid !h-auto min-h-[72px] w-full grid-cols-2 items-stretch gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 sm:grid-cols-3 lg:grid-cols-6"
           data-testid="admin-tabs"
@@ -423,9 +480,9 @@ export default function AdminDashboard() {
             className="!h-14 min-h-14 rounded-xl px-3 text-sm sm:text-base"
           >
             <Store className="mr-1.5 inline size-4" /> Stall enquiries
-            {stallEnquiries.length > 0 && (
+            {unreadEnquiries.count > 0 && (
               <span className="ml-2 rounded-full bg-cyan-400/15 px-2 py-0.5 text-xs text-cyan-200">
-                {stallEnquiries.length}
+                {unreadEnquiries.count}
               </span>
             )}
           </TabsTrigger>
@@ -908,6 +965,15 @@ export default function AdminDashboard() {
 
         {/* ---------- CUSTOMERS ---------- */}
         <TabsContent value="customers" className="mt-6">
+          <div className="mb-4 flex justify-end">
+            <Button
+              onClick={() => openCustomerDialog("new")}
+              className="bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
+              data-testid="admin-add-customer-button"
+            >
+              <Plus className="mr-1.5 size-4" /> Add customer
+            </Button>
+          </div>
           <div
             className="overflow-x-auto rounded-3xl border border-white/10 bg-[#121524]"
             data-testid="admin-customers-table"
@@ -921,6 +987,7 @@ export default function AdminDashboard() {
                   <TableHead>Bookings</TableHead>
                   <TableHead>Lifetime spend</TableHead>
                   <TableHead>Joined</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -938,6 +1005,37 @@ export default function AdminDashboard() {
                       {inr(c.total_spent)}
                     </TableCell>
                     <TableCell className="text-slate-400">{fmtDate(c.created_at)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1.5">
+                        <Button
+                          size="icon-xs"
+                          variant="outline"
+                          className="border-white/15 text-slate-300"
+                          onClick={() => openCustomerDialog(c)}
+                          aria-label={`Edit ${c.full_name}`}
+                          data-testid={`admin-edit-customer-${c.id}`}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
+                          size="icon-xs"
+                          variant="ghost"
+                          className="text-rose-300 hover:bg-rose-500/10"
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `Delete ${c.full_name}? Their bookings, reviews and account data will also be deleted.`,
+                              )
+                            )
+                              deleteCustomer.mutate(c.id);
+                          }}
+                          aria-label={`Delete ${c.full_name}`}
+                          data-testid={`admin-delete-customer-${c.id}`}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -1088,6 +1186,82 @@ export default function AdminDashboard() {
       </Tabs>
 
       {/* ---------- ARTIST DIALOG ---------- */}
+      <Dialog open={!!customerDialog} onOpenChange={(open) => !open && setCustomerDialog(null)}>
+        <DialogContent className="max-w-lg border-white/10 bg-[#101422] text-slate-100">
+          <DialogHeader>
+            <DialogTitle>
+              {customerDialog === "new" ? "Add customer" : "Update customer"}
+            </DialogTitle>
+            <DialogDescription>
+              Manage the customer account details. Leave password blank when editing to keep it
+              unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <Field label="Full name">
+              <Input
+                value={customerForm.full_name}
+                onChange={(event) =>
+                  setCustomerForm({ ...customerForm, full_name: event.target.value })
+                }
+                data-testid="admin-customer-name-input"
+              />
+            </Field>
+            <Field label="Email">
+              <Input
+                type="email"
+                value={customerForm.email}
+                onChange={(event) =>
+                  setCustomerForm({ ...customerForm, email: event.target.value })
+                }
+                data-testid="admin-customer-email-input"
+              />
+            </Field>
+            <Field label="Mobile">
+              <Input
+                inputMode="numeric"
+                maxLength={10}
+                value={customerForm.mobile}
+                onChange={(event) =>
+                  setCustomerForm({
+                    ...customerForm,
+                    mobile: event.target.value.replace(/\D/g, "").slice(0, 10),
+                  })
+                }
+                data-testid="admin-customer-mobile-input"
+              />
+            </Field>
+            <Field label={customerDialog === "new" ? "Password" : "New password (optional)"}>
+              <PasswordInput
+                value={customerForm.password}
+                onChange={(event) =>
+                  setCustomerForm({ ...customerForm, password: event.target.value })
+                }
+                autoComplete="new-password"
+                data-testid="admin-customer-password-input"
+              />
+            </Field>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCustomerDialog(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => saveCustomer.mutate()}
+              disabled={
+                saveCustomer.isPending ||
+                customerForm.full_name.trim().length < 2 ||
+                !/^\d{10}$/.test(customerForm.mobile) ||
+                (customerDialog === "new" && customerForm.password.length < 8)
+              }
+              data-testid="admin-save-customer-button"
+            >
+              {saveCustomer.isPending ? "Saving..." : "Save customer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!artistDialog} onOpenChange={(open) => !open && setArtistDialog(null)}>
         <DialogContent
           className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none flex-col gap-0 overflow-hidden rounded-[1.5rem] border-white/10 bg-[#0d101c] p-0 text-slate-100 sm:!max-w-4xl sm:rounded-[2rem]"
@@ -1554,8 +1728,7 @@ export default function AdminDashboard() {
                   </div>
                 ))}
               </div>
-              <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500">
-                <Sparkles className="mt-0.5 size-3.5 shrink-0 text-violet-300" />
+              <p className="mt-4 text-xs leading-5 text-slate-500">
                 Saved prices appear on Explore Concerts, concert details, seat selection, and
                 checkout.
               </p>

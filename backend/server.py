@@ -40,7 +40,9 @@ CONCERT_DURATION = timedelta(hours=3)
 
 
 DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=100)]
-CardHolderName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
+CardHolderName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)
+]
 MobileNumber = Annotated[str, StringConstraints(pattern=r"^[0-9]{10}$")]
 
 
@@ -170,8 +172,7 @@ def store(*, writable: bool = True):
         concerts_with_legacy_prices = [
             concert
             for concert in s.get("concerts", {}).values()
-            if [category["price"] for category in concert.get("categories", [])]
-            == legacy_prices
+            if [category["price"] for category in concert.get("categories", [])] == legacy_prices
         ]
         if concerts_with_legacy_prices:
             seeded_by_id = {concert["id"]: concert for concert in CONCERT_SEEDS}
@@ -179,7 +180,9 @@ def store(*, writable: bool = True):
                 seeded = seeded_by_id.get(concert["id"])
                 if not seeded:
                     continue
-                seeded_prices = {category["key"]: category["price"] for category in seeded["categories"]}
+                seeded_prices = {
+                    category["key"]: category["price"] for category in seeded["categories"]
+                }
                 for category in concert["categories"]:
                     if category["key"] in seeded_prices:
                         category["price"] = seeded_prices[category["key"]]
@@ -639,8 +642,25 @@ def concerts(
 
 
 @app.get("/api/concerts/{concert_id}")
-def concert(concert_id: str, s=State):
-    return concert_view(s, find(s, "concerts", concert_id))
+def concert(concert_id: str, request: Request, s=State):
+    source = find(s, "concerts", concert_id)
+    result = concert_view(s, source)
+    user = current(request, s, required=False)
+    if user and user["role"] == "customer":
+        review = next(
+            (item for item in source.get("reviews", []) if item.get("user_id") == user["id"]),
+            None,
+        )
+        result["my_review"] = (
+            {
+                key: review[key]
+                for key in ("id", "user_name", "rating", "comment", "created_at")
+                if key in review
+            }
+            if review
+            else None
+        )
+    return result
 
 
 @app.get("/api/concerts/{concert_id}/seats")
@@ -743,6 +763,25 @@ def review(concert_id: str, body: Review, request: Request, s=State):
         )
     )
     return {"message": "Thank you. Your concert feedback has been submitted."}
+
+
+@app.patch("/api/concerts/{concert_id}/reviews")
+def update_review(concert_id: str, body: Review, request: Request, s=State):
+    user = current(request, s)
+    if user["role"] != "customer":
+        fail("Only customers can update their own review", 403)
+    concert = find(s, "concerts", concert_id)
+    existing = next(
+        (item for item in concert.get("reviews", []) if item.get("user_id") == user["id"]),
+        None,
+    )
+    if not existing:
+        fail("Submit a review before updating it", 404)
+    comment = body.comment.strip()
+    if len(comment) < 10:
+        fail("Please write at least 10 characters about your experience")
+    existing.update(rating=body.rating, comment=comment, updated_at=stamp())
+    return {"message": "Your concert feedback has been updated."}
 
 
 @app.get("/api/artists")
@@ -1136,6 +1175,25 @@ class EnquiryStatusInput(BaseModel):
     status: Literal["received", "contacted", "approved", "closed"]
 
 
+@app.get("/api/admin/enquiries/unread-count")
+def unread_enquiries(request: Request, s=State):
+    admin = current(request, s, admin=True)
+    viewed_at = admin.get("enquiries_viewed_at", "")
+    return {
+        "count": sum(
+            item.get("enquiry_type") == "stall" and item.get("created_at", "") > viewed_at
+            for item in s["enquiries"]
+        )
+    }
+
+
+@app.post("/api/admin/enquiries/mark-viewed")
+def mark_enquiries_viewed(request: Request, s=State):
+    admin = current(request, s, admin=True)
+    admin["enquiries_viewed_at"] = stamp()
+    return {"count": 0}
+
+
 @app.get("/api/admin/enquiries")
 def admin_enquiries(request: Request, s=State):
     current(request, s, admin=True)
@@ -1143,9 +1201,7 @@ def admin_enquiries(request: Request, s=State):
 
 
 @app.patch("/api/admin/enquiries/{enquiry_id}/status")
-def update_enquiry_status(
-    enquiry_id: str, body: EnquiryStatusInput, request: Request, s=State
-):
+def update_enquiry_status(enquiry_id: str, body: EnquiryStatusInput, request: Request, s=State):
     current(request, s, admin=True)
     enquiry = next(
         (
@@ -1200,6 +1256,74 @@ def customers(request: Request, s=State):
     ]
 
 
+class AdminCustomerInput(BaseModel):
+    full_name: DisplayName
+    email: str = Field(min_length=3, max_length=254, pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+    mobile: MobileNumber
+    password: str | None = Field(default=None, min_length=8, max_length=256)
+
+
+def unique_customer_email(s, email, exclude=None):
+    if any(user["email"] == email and user["id"] != exclude for user in s["users"].values()):
+        fail("That email is already registered", 409)
+
+
+@app.post("/api/admin/customers")
+def create_customer(body: AdminCustomerInput, request: Request, s=State):
+    current(request, s, admin=True)
+    if not body.password:
+        fail("Enter a password of at least 8 characters")
+    email = body.email.strip().lower()
+    unique_customer_email(s, email)
+    customer = dict(
+        id=uid("u"),
+        full_name=body.full_name.strip(),
+        email=email,
+        mobile=body.mobile,
+        role="customer",
+        created_at=stamp(),
+        password_hash=password_hash(body.password),
+    )
+    s["users"][customer["id"]] = customer
+    return {**public_user(customer), "bookings_count": 0, "total_spent": 0}
+
+
+@app.patch("/api/admin/customers/{customer_id}")
+def update_customer(customer_id: str, body: AdminCustomerInput, request: Request, s=State):
+    current(request, s, admin=True)
+    customer = find(s, "users", customer_id)
+    if customer["role"] != "customer":
+        fail("Customer not found", 404)
+    email = body.email.strip().lower()
+    unique_customer_email(s, email, customer_id)
+    customer.update(full_name=body.full_name.strip(), email=email, mobile=body.mobile)
+    if body.password:
+        customer["password_hash"] = password_hash(body.password)
+    return public_user(customer)
+
+
+@app.delete("/api/admin/customers/{customer_id}")
+def delete_customer(customer_id: str, request: Request, s=State):
+    current(request, s, admin=True)
+    customer = find(s, "users", customer_id)
+    if customer["role"] != "customer":
+        fail("Customer not found", 404)
+    booking_ids = {b["id"] for b in s["bookings"].values() if b["user_id"] == customer_id}
+    for booking_id in booking_ids:
+        del s["bookings"][booking_id]
+    s["wishlist"] = [item for item in s["wishlist"] if item["user_id"] != customer_id]
+    s["notifications"] = [item for item in s["notifications"] if item["user_id"] != customer_id]
+    for concert in s["concerts"].values():
+        concert["reviews"] = [
+            review for review in concert.get("reviews", []) if review.get("user_id") != customer_id
+        ]
+    s["sessions"] = {
+        key: session for key, session in s["sessions"].items() if session["user_id"] != customer_id
+    }
+    del s["users"][customer_id]
+    return {"message": "Customer and related account data deleted"}
+
+
 @app.get("/api/admin/stats")
 def stats(request: Request, s=State):
     current(request, s, admin=True)
@@ -1224,9 +1348,7 @@ def stats(request: Request, s=State):
         and concert_has_ended(s["concerts"][booking["concert_id"]])
     }
     reviewed_pairs = {
-        (item.get("user_id"), item["concert_id"])
-        for item in reviews
-        if item.get("user_id")
+        (item.get("user_id"), item["concert_id"]) for item in reviews if item.get("user_id")
     }
     return dict(
         revenue=sum(b["total"] for b in paid),
